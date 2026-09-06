@@ -37,6 +37,3 @@ node_modules/
 # Build
 build/
 build-*/
-
-# OpenCode
-.opencode/
