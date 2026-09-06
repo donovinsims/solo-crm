@@ -1,9 +1,23 @@
 import Foundation
+import SwiftData
 
-struct Decision: Identifiable, Hashable {
-  var id: UUID = UUID()
-  var clientID: Client.ID
-  var projectID: ClientProject.ID?
-  var text: String
-  var createdAt: Date = .now
+@Model
+final class Decision {
+    var id: UUID
+    var text: String
+    var createdAt: Date
+    
+    @Relationship(inverse: \Client.decisions)
+    var client: Client?
+    
+    @Relationship(inverse: \ClientProject.decisions)
+    var project: ClientProject?
+    
+    init(client: Client, project: ClientProject?, text: String) {
+        self.id = UUID()
+        self.text = text
+        self.createdAt = Date()
+        self.client = client
+        self.project = project
+    }
 }

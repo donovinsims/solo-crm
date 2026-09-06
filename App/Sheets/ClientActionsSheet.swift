@@ -23,12 +23,18 @@ struct ClientActionsSheet: View {
           Button { open("tel://\(client.phone.filter(\.isNumber))") } label: {
             Label("Call", systemImage: "phone")
           }
+          .accessibilityLabel("Call \(client.name)")
+          .accessibilityHint("Opens phone app to call this client")
           Button { open("sms://\(client.phone.filter(\.isNumber))") } label: {
             Label("Text", systemImage: "message")
           }
+          .accessibilityLabel("Text \(client.name)")
+          .accessibilityHint("Opens messages app to text this client")
           Button { open("mailto:\(client.email)") } label: {
             Label("Email", systemImage: "envelope")
           }
+          .accessibilityLabel("Email \(client.name)")
+          .accessibilityHint("Opens mail app to email this client")
         }
 
         Section {
@@ -46,12 +52,16 @@ struct ClientActionsSheet: View {
             } label: {
               Label("Open Active Project", systemImage: "square.stack.3d.up")
             }
+            .accessibilityLabel("Open active project")
+            .accessibilityHint("View details for \(project.name)")
             ForEach(project.links) { link in
               Button {
                 open(link.urlString)
               } label: {
                 Label("Open \(link.title)", systemImage: link.systemImage)
               }
+              .accessibilityLabel("Open \(link.title)")
+              .accessibilityHint("Opens \(link.title) in browser")
             }
           }
         }
@@ -82,6 +92,8 @@ struct ClientActionsSheet: View {
     } label: {
       Label(title, systemImage: systemImage)
     }
+    .accessibilityLabel(title)
+    .accessibilityHint("Opens \(title.lowercased()) capture")
   }
 
   private func open(_ string: String) {

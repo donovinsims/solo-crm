@@ -1,11 +1,11 @@
 import SwiftUI
-import UIKit
 
 struct ProjectDetailView: View {
   var project: ClientProject
   @Environment(AppStore.self) private var store
   @Environment(QuickCaptureState.self) private var quickCapture
   @State private var statusSheetPresented = false
+  @State private var isLoading = false
 
   private var client: Client? { store.client(project.clientID) }
   private var liveProject: ClientProject { store.project(project.id) ?? project }
@@ -13,18 +13,27 @@ struct ProjectDetailView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 26) {
-        header
-        pipeline
-        moneyCard
-        linksSection
+        if isLoading {
+          VStack(spacing: 12) {
+            ForEach(0..<4, id: \.self) { _ in
+              SkeletonCard()
+            }
+          }
+          .padding(.horizontal, 20)
+        } else {
+          header
+          pipeline
+          moneyCard
+          linksSection
 
-        tasksSection
-        decisionsSection
-        blockersSection
-        findingsSection
-        recentUpdatesSection
+          tasksSection
+          decisionsSection
+          blockersSection
+          findingsSection
+          recentUpdatesSection
 
-        actionsRow
+          actionsRow
+        }
       }
       .padding(.horizontal, 20)
       .padding(.top, 8)
@@ -35,10 +44,16 @@ struct ProjectDetailView: View {
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button("Status") { statusSheetPresented = true }
+          .accessibilityLabel("Update project status")
       }
     }
     .sheet(isPresented: $statusSheetPresented) {
       ProjectStatusSheet(project: liveProject)
+    }
+    .task {
+      isLoading = true
+      try? await Task.sleep(for: .milliseconds(300))
+      isLoading = false
     }
   }
 
@@ -50,12 +65,14 @@ struct ProjectDetailView: View {
       Text(liveProject.name)
         .font(.largeTitle.weight(.bold))
       HStack(spacing: 6) {
-        StatusDot(tint: liveProject.status.tint)
+        StatusDot(tint: liveProject.status.tint, label: liveProject.status.rawValue)
         Text(liveProject.status.rawValue)
           .font(.subheadline.weight(.medium))
           .foregroundStyle(liveProject.status.tint.color)
       }
     }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(client?.name ?? "Unknown client"). \(liveProject.name). Status: \(liveProject.status.rawValue)")
   }
 
   private var pipeline: some View {
@@ -110,6 +127,8 @@ struct ProjectDetailView: View {
           .foregroundStyle(liveProject.remaining > 0 ? .red : .primary)
       }
     }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Project value: $\(Int(liveProject.projectValue)). Paid: $\(Int(liveProject.paidAmount)). Remaining: $\(Int(liveProject.remaining))")
   }
 
   private var linksSection: some View {
@@ -132,6 +151,7 @@ struct ProjectDetailView: View {
                     .background(Color(.secondarySystemGroupedBackground), in: .capsule)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Open \(link.title)")
               }
             }
           }
@@ -152,6 +172,9 @@ struct ProjectDetailView: View {
             }
           }
         }
+      } else {
+        InlineEmptyState(systemImage: "checklist", message: "No tasks for this project — tap + to add one")
+          .padding(.horizontal, 20)
       }
     }
   }
@@ -170,6 +193,9 @@ struct ProjectDetailView: View {
             }
           }
         }
+      } else {
+        InlineEmptyState(systemImage: "checkmark.seal", message: "No decisions logged")
+          .padding(.horizontal, 20)
       }
     }
   }
@@ -199,6 +225,9 @@ struct ProjectDetailView: View {
             }
           }
         }
+      } else {
+        InlineEmptyState(systemImage: "eye", message: "No findings for this project")
+          .padding(.horizontal, 20)
       }
     }
   }
@@ -222,6 +251,9 @@ struct ProjectDetailView: View {
             }
           }
         }
+      } else {
+        InlineEmptyState(systemImage: "clock.arrow.circlepath", message: "No recent updates")
+          .padding(.horizontal, 20)
       }
     }
   }
@@ -235,6 +267,7 @@ struct ProjectDetailView: View {
           .frame(maxWidth: .infinity)
       }
       .buttonStyle(.bordered)
+      .accessibilityLabel("Add update for \(liveProject.name)")
 
       HStack(spacing: 10) {
         Button {
@@ -243,14 +276,18 @@ struct ProjectDetailView: View {
           Label("Add Task", systemImage: "checklist")
             .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.bordered)
+        .accessibilityLabel("Add task for \(liveProject.name)")
+
         Button {
           quickCapture.present(clientID: liveProject.clientID, projectID: liveProject.id, stage: .decision)
         } label: {
           Label("Log Decision", systemImage: "checkmark.seal")
             .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.bordered)
+        .accessibilityLabel("Log decision for \(liveProject.name)")
       }
-      .buttonStyle(.bordered)
 
       Button {
         quickCapture.present(clientID: liveProject.clientID, projectID: liveProject.id, stage: .finding)
@@ -259,6 +296,7 @@ struct ProjectDetailView: View {
           .frame(maxWidth: .infinity)
       }
       .buttonStyle(.bordered)
+      .accessibilityLabel("Add finding for \(liveProject.name)")
     }
     .padding(.top, 8)
   }

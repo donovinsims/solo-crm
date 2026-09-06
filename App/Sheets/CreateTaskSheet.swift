@@ -33,6 +33,8 @@ struct CreateTaskSheet: View {
   @State private var customDate = Date.now
   @State private var detailsExpanded = false
   @State private var saved = false
+  @State private var isSaving = false
+  @State private var saveError: Error?
   @FocusState private var titleFocused: Bool
 
   var body: some View {
@@ -40,6 +42,7 @@ struct CreateTaskSheet: View {
       Section {
         TextField("What needs to happen?", text: $title, axis: .vertical)
           .focused($titleFocused)
+          .submitLabel(.next)
       } header: {
         Text("Task")
       } footer: {
@@ -55,6 +58,8 @@ struct CreateTaskSheet: View {
             }
           }
           .pickerStyle(.menu)
+          .accessibilityLabel("Select client")
+          .accessibilityHint("Choose which client this task belongs to")
 
           if let clientID, !store.projects(for: clientID).isEmpty {
             Picker("Project", selection: $projectID) {
@@ -64,6 +69,8 @@ struct CreateTaskSheet: View {
               }
             }
             .pickerStyle(.menu)
+            .accessibilityLabel("Select project")
+            .accessibilityHint("Choose which project this task belongs to")
           }
 
           Picker("Due", selection: $dueOption) {
@@ -72,9 +79,13 @@ struct CreateTaskSheet: View {
             }
           }
           .pickerStyle(.menu)
+          .accessibilityLabel("Due date option")
+          .accessibilityHint("Select when this task is due")
 
           if dueOption == .chooseDate {
             DatePicker("Date", selection: $customDate, displayedComponents: .date)
+              .accessibilityLabel("Custom due date")
+              .accessibilityHint("Select a specific due date")
           }
         }
       } footer: {
@@ -85,15 +96,36 @@ struct CreateTaskSheet: View {
         }
       }
 
+      if let error = saveError {
+        Section {
+          HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundStyle(.red)
+            Text(error.localizedDescription)
+              .font(.footnote)
+              .foregroundStyle(.red)
+            Spacer()
+            Button("Retry") { save() }
+              .font(.footnote.weight(.semibold))
+              .buttonStyle(.bordered)
+          }
+        }
+      }
+
       Section {
         Button {
           save()
         } label: {
-          Text("Add Task")
-            .font(.body.weight(.semibold))
-            .frame(maxWidth: .infinity)
+          if isSaving {
+            ProgressView()
+              .frame(maxWidth: .infinity, minHeight: 44)
+          } else {
+            Text("Add Task")
+              .font(.body.weight(.semibold))
+              .frame(maxWidth: .infinity, minHeight: 44)
+          }
         }
-        .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+        .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
       }
     }
     .navigationTitle("Task")
@@ -109,8 +141,16 @@ struct CreateTaskSheet: View {
 
   private func save() {
     let due = dueOption == .chooseDate ? customDate : dueOption.date
-    store.addTask(title: title.trimmingCharacters(in: .whitespaces), clientID: clientID, projectID: projectID, dueDate: due)
-    saved.toggle()
-    quickCapture.dismiss()
+    isSaving = true
+    saveError = nil
+    defer { isSaving = false }
+
+    do {
+      store.addTask(title: title.trimmingCharacters(in: .whitespaces), clientID: clientID, projectID: projectID, dueDate: due)
+      saved.toggle()
+      quickCapture.dismiss()
+    } catch {
+      saveError = error
+    }
   }
 }

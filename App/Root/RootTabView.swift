@@ -1,4 +1,5 @@
 import SwiftUI
+import AppIntents
 
 struct RootTabView: View {
   @State private var store = AppStore()
@@ -6,13 +7,14 @@ struct RootTabView: View {
   @State private var selectedTab: RootTab = .today
   @State private var searchPresented = false
   @State private var captureTrigger = 0
+  @State private var deepLinkClientID: UUID?
 
   var body: some View {
     ZStack(alignment: .bottom) {
       Group {
         switch selectedTab {
         case .today: TodayView()
-        case .clients: ClientsListView()
+        case .clients: ClientsListView(deepLinkClientID: $deepLinkClientID)
         case .projects: WorkView()
         case .more: MoreView(searchPresented: $searchPresented)
         }
@@ -39,6 +41,20 @@ struct RootTabView: View {
       SearchSheet()
         .environment(store)
     }
+    .onOpenURL { url in
+      handleDeepLink(url)
+    }
+  }
+
+  private func handleDeepLink(_ url: URL) {
+    guard url.scheme == "relay",
+          url.host == "open-client",
+          let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+          let clientIDString = components.queryItems?.first(where: { $0.name == "id" })?.value,
+          let clientID = UUID(uuidString: clientIDString) else { return }
+
+    deepLinkClientID = clientID
+    selectedTab = .clients
   }
 }
 

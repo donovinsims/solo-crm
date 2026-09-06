@@ -8,6 +8,7 @@ struct VoiceCaptureSheet: View {
   }
 
   @Environment(QuickCaptureState.self) private var quickCapture
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var recordingState: RecordingState = .idle
   @State private var pulse = false
 
@@ -47,7 +48,11 @@ struct VoiceCaptureSheet: View {
       }
       .buttonStyle(.plain)
       .disabled(recordingState == .processing)
-      .animation(.smooth(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+      .accessibilityLabel(accessibilityLabel)
+      .accessibilityHint(accessibilityHint)
+      .if(!reduceMotion) { view in
+        view.animation(.smooth(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+      }
 
       Text(subtitle)
         .font(.subheadline)
@@ -76,6 +81,22 @@ struct VoiceCaptureSheet: View {
     }
   }
 
+  private var accessibilityLabel: String {
+    switch recordingState {
+    case .idle: "Start recording"
+    case .recording: "Stop recording"
+    case .processing: "Processing recording"
+    }
+  }
+
+  private var accessibilityHint: String {
+    switch recordingState {
+    case .idle: "Begin voice capture"
+    case .recording: "End voice capture and process"
+    case .processing: "Please wait while the recording is processed"
+    }
+  }
+
   private func handleTap() {
     switch recordingState {
     case .idle:
@@ -96,10 +117,23 @@ struct VoiceCaptureSheet: View {
   }
 }
 
+extension View {
+  @ViewBuilder
+  func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
+    if condition {
+      transform(self)
+    } else {
+      self
+    }
+  }
+}
+
 struct VoiceReviewSheet: View {
   @Environment(AppStore.self) private var store
   @Environment(QuickCaptureState.self) private var quickCapture
   @State private var saved = false
+  @State private var isSaving = false
+  @State private var saveError: Error?
 
   private var pietro: Client? { store.clients.first { $0.name.contains("Pietro") } }
 
@@ -119,15 +153,36 @@ struct VoiceReviewSheet: View {
         reviewCard(title: "Task", systemImage: "checklist", tint: .blue, text: "Test pickup ordering.")
         reviewCard(title: "Finding", systemImage: "eye", tint: .purple, text: "Repeated customer questions handled manually.")
 
+        if let error = saveError {
+          HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundStyle(.red)
+            Text(error.localizedDescription)
+              .font(.footnote)
+              .foregroundStyle(.red)
+            Spacer()
+            Button("Retry") { saveAll() }
+              .font(.footnote.weight(.semibold))
+              .buttonStyle(.bordered)
+          }
+          .padding(.horizontal, 20)
+        }
+
         VStack(spacing: 10) {
           Button {
             saveAll()
           } label: {
-            Text("Save All")
-              .font(.body.weight(.semibold))
-              .frame(maxWidth: .infinity)
+            if isSaving {
+              ProgressView()
+                .frame(maxWidth: .infinity, minHeight: 44)
+            } else {
+              Text("Save All")
+                .font(.body.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
           }
           .buttonStyle(.borderedProminent)
+          .disabled(isSaving)
 
           HStack(spacing: 10) {
             Button("Edit") { }
@@ -153,6 +208,7 @@ struct VoiceReviewSheet: View {
         .foregroundStyle(tint)
         .frame(width: 28, height: 28)
         .background(tint.opacity(0.15), in: .rect(cornerRadius: 8))
+        .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: 3) {
         Text(title.uppercased())
@@ -164,6 +220,8 @@ struct VoiceReviewSheet: View {
       }
       Spacer()
     }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(title): \(text)")
   }
 
   private func saveAll() {
@@ -171,11 +229,19 @@ struct VoiceReviewSheet: View {
       quickCapture.dismiss()
       return
     }
-    let project = store.projects(for: pietro.id).first
-    store.addDecision(text: "Online ordering remains priority.", clientID: pietro.id, projectID: project?.id)
-    store.addTask(title: "Test pickup ordering.", clientID: pietro.id, projectID: project?.id, dueDate: .now)
-    store.addFinding(text: "Repeated customer questions handled manually.", clientID: pietro.id, projectID: project?.id, category: .customerExperience, impact: .medium)
-    saved.toggle()
-    quickCapture.dismiss()
+    isSaving = true
+    saveError = nil
+    defer { isSaving = false }
+
+    do {
+      let project = store.projects(for: pietro.id).first
+      store.addDecision(text: "Online ordering remains priority.", clientID: pietro.id, projectID: project?.id)
+      store.addTask(title: "Test pickup ordering.", clientID: pietro.id, projectID: project?.id, dueDate: Date.now)
+      store.addFinding(text: "Repeated customer questions handled manually.", clientID: pietro.id, projectID: project?.id, category: .customerExperience, impact: .medium)
+      saved.toggle()
+      quickCapture.dismiss()
+    } catch {
+      saveError = error
+    }
   }
 }

@@ -5,34 +5,45 @@ struct ClientRow: View {
   @Environment(AppStore.self) private var store
 
   var body: some View {
-    HStack(alignment: .top, spacing: 12) {
+    HStack(alignment: .top, spacing: DesignTokens.spaceS) {
       Circle()
-        .fill(Color.accentColor.opacity(0.15))
+        .fill(DesignTokens.accent.opacity(0.15))
         .frame(width: 40, height: 40)
         .overlay {
           Text(initials)
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.tint)
+            .foregroundStyle(DesignTokens.accent)
         }
+        .accessibilityHidden(true)
 
-      VStack(alignment: .leading, spacing: 3) {
+      VStack(alignment: .leading, spacing: DesignTokens.spaceXS) {
         Text(client.name)
           .font(.body.weight(.medium))
-          .foregroundStyle(.primary)
+          .foregroundStyle(DesignTokens.textPrimary)
         Text("\(client.city), \(client.state)")
           .font(.subheadline)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(DesignTokens.textSecondary)
         Text(store.clientStatusLine(client))
           .font(.subheadline)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(DesignTokens.textSecondary)
       }
 
       Spacer()
+
+      Image(systemName: "chevron.right")
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(DesignTokens.textTertiary)
+        .accessibilityHidden(true)
     }
     .frame(minHeight: 60)
-    .padding(.vertical, 4)
+    .padding(.vertical, DesignTokens.spaceXS)
     .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(client.name), \(client.city), \(client.state). \(store.clientStatusLine(client))")
     .accessibilityHint("Opens client details")
+    .accessibilityAction(named: "Call") { }
+    .accessibilityAction(named: "Message") { }
+    .accessibilityAction(named: "Add Task") { }
+    .accessibilityAction(named: "Add Finding") { }
   }
 
   private var initials: String {

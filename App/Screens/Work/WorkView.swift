@@ -10,6 +10,7 @@ struct WorkView: View {
   @Environment(QuickCaptureState.self) private var quickCapture
   @State private var segment: Segment = .projects
   @State private var selectedProject: ClientProject?
+  @State private var isLoading = false
 
   var body: some View {
     NavigationStack {
@@ -25,15 +26,38 @@ struct WorkView: View {
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
 
-        switch segment {
-        case .projects: projectSections
-        case .tasks: taskSections
+        if isLoading {
+          Section {
+            ForEach(0..<5, id: \.self) { _ in
+              SkeletonRow()
+            }
+          }
+        } else {
+          switch segment {
+          case .projects: projectSections
+          case .tasks: taskSections
+          }
         }
       }
       .listStyle(.insetGrouped)
       .navigationTitle("Projects")
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            quickCapture.present(stage: .task)
+          } label: {
+            Image(systemName: "plus")
+          }
+          .accessibilityLabel("Add new item")
+        }
+      }
       .navigationDestination(item: $selectedProject) { project in
         ProjectDetailView(project: project)
+      }
+      .task {
+        isLoading = true
+        try? await Task.sleep(for: .milliseconds(300))
+        isLoading = false
       }
     }
   }
@@ -44,6 +68,21 @@ struct WorkView: View {
     projectGroup(title: "Waiting", status: .waitingOnClient)
     projectGroup(title: "Blocked", status: .blocked)
     projectGroup(title: "Completed", status: .completed)
+
+    if store.projects.isEmpty {
+      Section {
+        EmptyStateView(
+          systemImage: "square.stack.3d.up",
+          title: "No Projects",
+          message: "Add a project from a client detail view to get started.",
+          actionTitle: nil,
+          action: nil
+        )
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 24, leading: 0, bottom: 24, trailing: 0))
+      }
+    }
   }
 
   @ViewBuilder
@@ -71,14 +110,29 @@ struct WorkView: View {
     let waiting = store.tasks.filter { !$0.isCompleted && $0.isWaitingOnClient }
     let completed = store.tasks.filter(\.isCompleted)
 
-    taskGroup(title: "Today", items: today)
-    taskGroup(title: "Upcoming", items: upcoming)
-    taskGroup(title: "Waiting", items: waiting)
-    taskGroup(title: "Completed", items: completed)
+    taskGroup(title: "Today", items: today, emptyMessage: "No tasks due today")
+    taskGroup(title: "Upcoming", items: upcoming, emptyMessage: "No upcoming tasks")
+    taskGroup(title: "Waiting", items: waiting, emptyMessage: "Nothing waiting on clients")
+    taskGroup(title: "Completed", items: completed, emptyMessage: "No completed tasks yet")
+
+    if store.tasks.isEmpty {
+      Section {
+        EmptyStateView(
+          systemImage: "checklist",
+          title: "No Tasks",
+          message: "Tap + to add your first task.",
+          actionTitle: "Add Task",
+          action: { quickCapture.present(stage: .task) }
+        )
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 24, leading: 0, bottom: 24, trailing: 0))
+      }
+    }
   }
 
   @ViewBuilder
-  private func taskGroup(title: String, items: [TaskItem]) -> some View {
+  private func taskGroup(title: String, items: [TaskItem], emptyMessage: String) -> some View {
     if !items.isEmpty {
       Section(title) {
         ForEach(items) { task in
@@ -90,6 +144,7 @@ struct WorkView: View {
                 Label("Complete", systemImage: "checkmark")
               }
               .tint(.green)
+              .accessibilityLabel("Mark task complete")
             }
             .swipeActions(edge: .leading) {
               Button {
@@ -98,6 +153,7 @@ struct WorkView: View {
                 Label("Snooze", systemImage: "clock")
               }
               .tint(.orange)
+              .accessibilityLabel("Snooze task")
 
               Button {
                 store.markTaskWaiting(task)
@@ -105,8 +161,16 @@ struct WorkView: View {
                 Label("Waiting", systemImage: "hourglass")
               }
               .tint(.gray)
+              .accessibilityLabel("Mark task as waiting")
             }
         }
+      }
+    } else if segment == .tasks {
+      // Show inline empty state for the first empty section only
+      Section(title) {
+        InlineEmptyState(systemImage: "checklist", message: emptyMessage)
+          .listRowBackground(Color.clear)
+          .listRowSeparator(.hidden)
       }
     }
   }
@@ -118,7 +182,7 @@ private struct ProjectRow: View {
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
-      StatusDot(tint: project.status.tint)
+      StatusDot(tint: project.status.tint, label: project.status.rawValue)
         .padding(.top, 6)
 
       VStack(alignment: .leading, spacing: 3) {
@@ -143,8 +207,11 @@ private struct ProjectRow: View {
       Image(systemName: "chevron.right")
         .font(.footnote.weight(.semibold))
         .foregroundStyle(.tertiary)
+        .accessibilityHidden(true)
     }
     .frame(minHeight: 44)
     .padding(.vertical, 4)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(store.client(project.clientID)?.name ?? "Unknown client"). \(project.name). \(project.phase). Status: \(project.status.rawValue)\(project.nextAction != nil ? ". Next: \(project.nextAction!)" : "")")
   }
 }

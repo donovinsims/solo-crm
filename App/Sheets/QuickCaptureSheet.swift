@@ -37,7 +37,7 @@ struct QuickCaptureSheet: View {
           } label: {
             Image(systemName: "xmark")
           }
-          .accessibilityLabel("Close")
+          .accessibilityLabel("Close capture")
         }
       }
     }
@@ -53,6 +53,8 @@ struct QuickCaptureRootView: View {
   @Environment(QuickCaptureState.self) private var quickCapture
   @State private var text = ""
   @State private var saved = false
+  @State private var isSaving = false
+  @State private var saveError: Error?
   @FocusState private var focused: Bool
 
   var body: some View {
@@ -73,15 +75,36 @@ struct QuickCaptureRootView: View {
         }
       }
 
+      if let error = saveError {
+        Section {
+          HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundStyle(.red)
+            Text(error.localizedDescription)
+              .font(.footnote)
+              .foregroundStyle(.red)
+            Spacer()
+            Button("Retry") { saveNote() }
+              .font(.footnote.weight(.semibold))
+              .buttonStyle(.bordered)
+          }
+        }
+      }
+
       Section {
         Button {
           saveNote()
         } label: {
-          Label("Save to Today", systemImage: "arrow.down.circle.fill")
-            .font(.body.weight(.semibold))
-            .frame(maxWidth: .infinity, minHeight: 44)
+          if isSaving {
+            ProgressView()
+              .frame(maxWidth: .infinity, minHeight: 44)
+          } else {
+            Label("Save to Today", systemImage: "arrow.down.circle.fill")
+              .font(.body.weight(.semibold))
+              .frame(maxWidth: .infinity, minHeight: 44)
+          }
         }
-        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
       }
 
       Section("Add more detail") {
@@ -108,6 +131,7 @@ struct QuickCaptureRootView: View {
           .font(.body.weight(.medium))
           .foregroundStyle(.tint)
           .frame(width: 32, height: 32)
+          .accessibilityHidden(true)
 
         VStack(alignment: .leading, spacing: 2) {
           Text(title)
@@ -123,17 +147,29 @@ struct QuickCaptureRootView: View {
         Image(systemName: "chevron.right")
           .font(.footnote.weight(.semibold))
           .foregroundStyle(.tertiary)
+          .accessibilityHidden(true)
       }
       .frame(minHeight: 44)
     }
     .buttonStyle(.plain)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(title). \(subtitle)")
+    .accessibilityHint("Opens \(title.lowercased()) capture")
   }
 
   private func saveNote() {
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedText.isEmpty else { return }
-    store.addNote(text: trimmedText, clientID: quickCapture.prefilledClientID)
-    saved.toggle()
-    quickCapture.dismiss()
+    isSaving = true
+    saveError = nil
+    defer { isSaving = false }
+
+    do {
+      store.addNote(text: trimmedText, clientID: quickCapture.prefilledClientID)
+      saved.toggle()
+      quickCapture.dismiss()
+    } catch {
+      saveError = error
+    }
   }
 }
