@@ -16,15 +16,15 @@ struct TodayView: View {
   private var focusItems: [FocusItem] {
     var items: [FocusItem] = []
     for task in store.openTasksToday where !task.isCompleted {
-      guard let client = store.client(task.clientID) else { continue }
-      items.append(FocusItem(client: client, project: store.project(task.projectID), detail: task.title, trailing: "Due today", trailingTint: .accent, systemImage: "checklist"))
+      guard let client = task.client else { continue }
+      items.append(FocusItem(client: client, project: task.project, detail: task.title, trailing: "Due today", trailingTint: .accent, systemImage: "checklist"))
     }
     for task in store.waitingTasks {
-      guard let client = store.client(task.clientID) else { continue }
-      items.append(FocusItem(client: client, project: store.project(task.projectID), detail: task.title, trailing: DueDateFormatting.waitingLabel(since: task.createdAt), trailingTint: .amber, systemImage: "hourglass"))
+      guard let client = task.client else { continue }
+      items.append(FocusItem(client: client, project: task.project, detail: task.title, trailing: DueDateFormatting.waitingLabel(since: task.createdAt), trailingTint: .amber, systemImage: "hourglass"))
     }
     for project in store.projectsWithBalances {
-      guard let client = store.client(project.clientID) else { continue }
+      guard let client = project.client else { continue }
       items.append(FocusItem(client: client, project: project, detail: project.name, trailing: "$\(Int(project.remaining)) outstanding", trailingTint: .red, systemImage: "dollarsign.circle"))
     }
     return items
@@ -194,7 +194,7 @@ struct TodayView: View {
               HStack(spacing: 10) {
                 StatusDot(tint: project.status.tint, label: project.status.rawValue)
                 VStack(alignment: .leading, spacing: 2) {
-                  Text(store.client(project.clientID)?.name ?? "")
+                  Text(project.client?.name ?? "")
                     .font(.body.weight(.medium))
                     .foregroundStyle(.primary)
                   Text("\(project.name) · \(project.phase)")
@@ -213,7 +213,7 @@ struct TodayView: View {
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(store.client(project.clientID)?.name ?? "Unknown client"). \(project.name). \(project.phase). Status: \(project.status.rawValue)")
+            .accessibilityLabel("\(project.client?.name ?? "Unknown client"). \(project.name). \(project.phase). Status: \(project.status.rawValue)")
           }
         }
       }
