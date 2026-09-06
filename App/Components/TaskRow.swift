@@ -13,7 +13,7 @@ struct TaskRow: View {
           .foregroundStyle(task.isCompleted ? Color.accentColor : Color.secondary.opacity(0.5))
       }
       .buttonStyle(.plain)
-      .padding(.top, 1)
+      .frame(width: 44, height: 44)
 
       VStack(alignment: .leading, spacing: 3) {
         Text(task.title)
@@ -47,6 +47,8 @@ struct TaskRow: View {
           .foregroundStyle(label == "Overdue" ? .red : .secondary)
       }
     }
+    .frame(minHeight: 52)
     .padding(.vertical, 4)
+    .accessibilityElement(children: .combine)
   }
 }

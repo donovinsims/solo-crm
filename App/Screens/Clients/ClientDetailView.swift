@@ -66,7 +66,7 @@ struct ClientDetailView: View {
         Button {
           actionsPresented = true
         } label: {
-          Image(systemName: "ellipsis.circle")
+          Image(systemName: "ellipsis")
         }
         .accessibilityLabel("More actions")
       }
@@ -101,9 +101,6 @@ struct ClientDetailView: View {
       actionButton(title: "Email", systemImage: "envelope.fill") {
         openURL("mailto:\(client.email)")
       }
-      actionButton(title: "More", systemImage: "ellipsis") {
-        actionsPresented = true
-      }
     }
   }
 
@@ -116,7 +113,8 @@ struct ClientDetailView: View {
           .font(.caption)
       }
       .frame(maxWidth: .infinity)
-      .padding(.vertical, 10)
+      .frame(minHeight: 44)
+      .padding(.vertical, 8)
       .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
     }
     .buttonStyle(.plain)

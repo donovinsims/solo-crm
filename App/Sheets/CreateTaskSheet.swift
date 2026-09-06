@@ -31,6 +31,7 @@ struct CreateTaskSheet: View {
   @State private var projectID: ClientProject.ID?
   @State private var dueOption: DueOption = .today
   @State private var customDate = Date.now
+  @State private var detailsExpanded = false
   @State private var saved = false
   @FocusState private var titleFocused: Bool
 
@@ -39,43 +40,48 @@ struct CreateTaskSheet: View {
       Section {
         TextField("What needs to happen?", text: $title, axis: .vertical)
           .focused($titleFocused)
+      } header: {
+        Text("Task")
+      } footer: {
+        Text("Keep it short. You can add context when it becomes useful.")
       }
 
-      Section("Client") {
-        Picker("Client", selection: $clientID) {
-          Text("None").tag(Client.ID?.none)
-          ForEach(store.clients) { client in
-            Text(client.name).tag(Optional(client.id))
-          }
-        }
-        .pickerStyle(.menu)
-        .labelsHidden()
-      }
-
-      if let clientID, !store.projects(for: clientID).isEmpty {
-        Section("Project") {
-          Picker("Project", selection: $projectID) {
-            Text("None").tag(ClientProject.ID?.none)
-            ForEach(store.projects(for: clientID)) { project in
-              Text(project.name).tag(Optional(project.id))
+      Section {
+        DisclosureGroup("Add details", isExpanded: $detailsExpanded) {
+          Picker("Client", selection: $clientID) {
+            Text("None").tag(Client.ID?.none)
+            ForEach(store.clients) { client in
+              Text(client.name).tag(Optional(client.id))
             }
           }
           .pickerStyle(.menu)
-          .labelsHidden()
-        }
-      }
 
-      Section("Due") {
-        Picker("Due", selection: $dueOption) {
-          ForEach(DueOption.allCases) { option in
-            Text(option.rawValue).tag(option)
+          if let clientID, !store.projects(for: clientID).isEmpty {
+            Picker("Project", selection: $projectID) {
+              Text("None").tag(ClientProject.ID?.none)
+              ForEach(store.projects(for: clientID)) { project in
+                Text(project.name).tag(Optional(project.id))
+              }
+            }
+            .pickerStyle(.menu)
+          }
+
+          Picker("Due", selection: $dueOption) {
+            ForEach(DueOption.allCases) { option in
+              Text(option.rawValue).tag(option)
+            }
+          }
+          .pickerStyle(.menu)
+
+          if dueOption == .chooseDate {
+            DatePicker("Date", selection: $customDate, displayedComponents: .date)
           }
         }
-        .pickerStyle(.inline)
-        .labelsHidden()
-
-        if dueOption == .chooseDate {
-          DatePicker("Date", selection: $customDate, displayedComponents: .date)
+      } footer: {
+        if let clientID, let client = store.client(clientID) {
+          Text("For \(client.name).")
+        } else {
+          Text("Client, project, and due date are optional.")
         }
       }
 
@@ -90,11 +96,12 @@ struct CreateTaskSheet: View {
         .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
       }
     }
-    .navigationTitle("New Task")
+    .navigationTitle("Task")
     .navigationBarTitleDisplayMode(.inline)
     .onAppear {
       clientID = quickCapture.prefilledClientID
       projectID = quickCapture.prefilledProjectID
+      detailsExpanded = false
       titleFocused = true
     }
     .sensoryFeedback(.success, trigger: saved)

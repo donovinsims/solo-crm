@@ -16,15 +16,15 @@ struct TodayView: View {
     var items: [FocusItem] = []
     for task in store.openTasksToday where !task.isCompleted {
       guard let client = store.client(task.clientID) else { continue }
-      items.append(FocusItem(client: client, project: store.project(task.projectID), headline: task.projectID.flatMap { store.project($0)?.name } ?? "Task", detail: task.title, trailing: "Due today", trailingTint: .accent))
+      items.append(FocusItem(client: client, project: store.project(task.projectID), detail: task.title, trailing: "Due today", trailingTint: .accent, systemImage: "checklist"))
     }
     for task in store.waitingTasks {
       guard let client = store.client(task.clientID) else { continue }
-      items.append(FocusItem(client: client, project: store.project(task.projectID), headline: task.projectID.flatMap { store.project($0)?.name } ?? "Waiting", detail: task.title, trailing: DueDateFormatting.waitingLabel(since: task.createdAt), trailingTint: .amber))
+      items.append(FocusItem(client: client, project: store.project(task.projectID), detail: task.title, trailing: DueDateFormatting.waitingLabel(since: task.createdAt), trailingTint: .amber, systemImage: "hourglass"))
     }
     for project in store.projectsWithBalances {
       guard let client = store.client(project.clientID) else { continue }
-      items.append(FocusItem(client: client, project: project, headline: "Invoice", detail: "\(project.name)", trailing: "$\(Int(project.remaining)) outstanding", trailingTint: .red))
+      items.append(FocusItem(client: client, project: project, detail: project.name, trailing: "$\(Int(project.remaining)) outstanding", trailingTint: .red, systemImage: "dollarsign.circle"))
     }
     return items
   }
@@ -81,6 +81,14 @@ struct TodayView: View {
 
   private var focusSection: some View {
     VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        SectionLabel(title: "Needs You")
+        Spacer()
+        Text("\(focusItems.count)")
+          .font(.footnote.weight(.semibold))
+          .foregroundStyle(.secondary)
+      }
+
       ForEach(Array(focusItems.enumerated()), id: \.offset) { index, item in
         Button {
           if let project = item.project {
@@ -89,22 +97,37 @@ struct TodayView: View {
             selectedClient = item.client
           }
         } label: {
-          VStack(alignment: .leading, spacing: 6) {
-            Text(item.client.name.uppercased())
-              .font(.caption.weight(.bold))
-              .foregroundStyle(.secondary)
-              .tracking(0.4)
-            Text(item.detail)
-              .font(.title3.weight(.semibold))
-              .foregroundStyle(.primary)
-            Text(item.trailing)
-              .font(.subheadline.weight(.medium))
+          HStack(alignment: .top, spacing: 12) {
+            Image(systemName: item.systemImage)
+              .font(.body.weight(.semibold))
               .foregroundStyle(item.trailingTint.color)
+              .frame(width: 28, height: 44, alignment: .top)
+
+            VStack(alignment: .leading, spacing: 5) {
+              Text(item.client.name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+              Text(item.detail)
+                .font(.body.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+              Text(item.trailing)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(item.trailingTint.color)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+              .font(.footnote.weight(.semibold))
+              .foregroundStyle(.secondary)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(.vertical, 14)
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
 
         if index < focusItems.count - 1 {
           Divider()
@@ -115,20 +138,35 @@ struct TodayView: View {
 
   private var activeWorkSection: some View {
     VStack(alignment: .leading, spacing: 12) {
-      SectionLabel(title: "Active Work")
+      HStack {
+        SectionLabel(title: "Active Work")
+        Spacer()
+        Text("\(store.activeProjects.count)")
+          .font(.footnote.weight(.semibold))
+          .foregroundStyle(.secondary)
+      }
       VStack(alignment: .leading, spacing: 10) {
         ForEach(store.activeProjects) { project in
           Button {
             selectedProject = project
           } label: {
-            HStack {
-              Text(store.client(project.clientID)?.name ?? "")
-                .foregroundStyle(.primary)
-              Text("— \(project.phase)")
-                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+              StatusDot(tint: project.status.tint)
+              VStack(alignment: .leading, spacing: 2) {
+                Text(store.client(project.clientID)?.name ?? "")
+                  .font(.body.weight(.medium))
+                  .foregroundStyle(.primary)
+                Text("\(project.name) · \(project.phase)")
+                  .font(.subheadline)
+                  .foregroundStyle(.secondary)
+                  .lineLimit(1)
+              }
               Spacer()
+              Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
             }
-            .font(.body)
+            .frame(minHeight: 44)
           }
           .buttonStyle(.plain)
         }
@@ -145,24 +183,39 @@ struct TodayView: View {
     VStack(alignment: .leading, spacing: 12) {
       SectionLabel(title: "Waiting")
       VStack(alignment: .leading, spacing: 6) {
-        Text("\(store.waitingTasks.count) waiting on clients")
-          .font(.body)
+        Label("\(store.waitingTasks.count) waiting on clients", systemImage: "hourglass")
           .foregroundStyle(.primary)
         if !store.blockedProjects.isEmpty {
-          Text("\(store.blockedProjects.count) blocked")
-            .font(.body)
+          Label("\(store.blockedProjects.count) blocked project\(store.blockedProjects.count == 1 ? "" : "s")", systemImage: "exclamationmark.triangle")
             .foregroundStyle(.primary)
         }
       }
+      .font(.body)
     }
   }
 
   private var moneySection: some View {
     VStack(alignment: .leading, spacing: 12) {
-      SectionLabel(title: "Money")
-      Text("$\(Int(store.outstandingBalance)) outstanding")
-        .font(.body)
-        .foregroundStyle(.primary)
+      HStack {
+        SectionLabel(title: "Money")
+        Spacer()
+        NavigationLink {
+          MoneyView()
+        } label: {
+          Image(systemName: "chevron.right")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("View money")
+      }
+      HStack {
+        Label("Outstanding", systemImage: "dollarsign.circle")
+        Spacer()
+        Text("$\(Int(store.outstandingBalance))")
+          .font(.body.weight(.semibold))
+      }
+      .foregroundStyle(.primary)
     }
   }
 
@@ -175,26 +228,39 @@ struct TodayView: View {
             Button {
               selectedClient = client
             } label: {
-              Text(client.name)
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color(.secondarySystemGroupedBackground), in: .capsule)
-                .foregroundStyle(.primary)
+              HStack(spacing: 8) {
+                Text(initials(for: client))
+                  .font(.caption.weight(.semibold))
+                  .foregroundStyle(.tint)
+                  .frame(width: 28, height: 28)
+                  .background(Color.accentColor.opacity(0.14), in: Circle())
+                Text(client.name)
+                  .font(.subheadline.weight(.medium))
+                  .foregroundStyle(.primary)
+              }
+              .padding(.horizontal, 10)
+              .padding(.vertical, 7)
+              .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
             }
             .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
           }
         }
       }
     }
+  }
+
+  private func initials(for client: Client) -> String {
+    let letters = client.name.split(separator: " ").prefix(2).compactMap { $0.first }
+    return String(letters).uppercased()
   }
 }
 
 private struct FocusItem {
   var client: Client
   var project: ClientProject?
-  var headline: String
   var detail: String
   var trailing: String
   var trailingTint: SemanticTint
+  var systemImage: String
 }

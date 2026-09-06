@@ -29,7 +29,10 @@ struct ClientRow: View {
 
       Spacer()
     }
+    .frame(minHeight: 60)
     .padding(.vertical, 4)
+    .accessibilityElement(children: .combine)
+    .accessibilityHint("Opens client details")
   }
 
   private var initials: String {

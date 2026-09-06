@@ -31,7 +31,7 @@ struct WorkView: View {
         }
       }
       .listStyle(.insetGrouped)
-      .navigationTitle("Work")
+      .navigationTitle("Projects")
       .navigationDestination(item: $selectedProject) { project in
         ProjectDetailView(project: project)
       }
@@ -139,7 +139,12 @@ private struct ProjectRow: View {
       }
 
       Spacer()
+
+      Image(systemName: "chevron.right")
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(.tertiary)
     }
+    .frame(minHeight: 44)
     .padding(.vertical, 4)
   }
 }

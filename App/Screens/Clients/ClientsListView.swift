@@ -60,7 +60,7 @@ struct ClientsListView: View {
             }
             .contextMenu {
               Button("Call", systemImage: "phone") { callClient(client) }
-              Button("Message", systemImage: "message") { }
+              Button("Message", systemImage: "message") { messageClient(client) }
               Button("Add Task", systemImage: "checklist") { quickCapture.present(clientID: client.id, stage: .task) }
               Button("Add Finding", systemImage: "eye") { quickCapture.present(clientID: client.id, stage: .finding) }
               Divider()
@@ -85,6 +85,11 @@ struct ClientsListView: View {
 
   private func callClient(_ client: Client) {
     guard let url = URL(string: "tel://\(client.phone.filter(\.isNumber))") else { return }
+    UIApplication.shared.open(url)
+  }
+
+  private func messageClient(_ client: Client) {
+    guard let url = URL(string: "sms://\(client.phone.filter(\.isNumber))") else { return }
     UIApplication.shared.open(url)
   }
 }
