@@ -1,11 +1,14 @@
 import SwiftUI
 import AppIntents
+import SwiftData
 
 @main
 struct AppDefinition: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(AppStore.shared)
+                .modelContainer(Persistence.sharedContainer)
         }
     }
 }
