@@ -25,7 +25,9 @@ final class ProjectLink {
     var title: String
     var systemImage: String
     var urlString: String
-    
+
+    var project: ClientProject?
+
     init(title: String, systemImage: String, urlString: String) {
         self.id = UUID()
         self.title = title
@@ -43,30 +45,30 @@ final class ClientProject {
     var nextAction: String?
     var projectValue: Double
     var paidAmount: Double
-    
+
     @Relationship(inverse: \Client.projects)
     var client: Client?
-    
+
     @Relationship(deleteRule: .cascade, inverse: \ProjectLink.project)
     var links: [ProjectLink] = []
-    
+
     @Relationship(deleteRule: .cascade, inverse: \TaskItem.project)
     var tasks: [TaskItem] = []
-    
+
     @Relationship(deleteRule: .cascade, inverse: \Finding.project)
     var findings: [Finding] = []
-    
+
     @Relationship(deleteRule: .cascade, inverse: \Decision.project)
     var decisions: [Decision] = []
-    
+
     @Relationship(deleteRule: .cascade, inverse: \PaymentRecord.project)
     var payments: [PaymentRecord] = []
-    
+
     @Relationship(deleteRule: .cascade, inverse: \ActivityEvent.project)
     var activity: [ActivityEvent] = []
-    
+
     var remaining: Double { max(projectValue - paidAmount, 0) }
-    
+
     init(client: Client, name: String, phase: String, status: ProjectStatus, nextAction: String?, projectValue: Double, paidAmount: Double, links: [ProjectLink] = []) {
         self.id = UUID()
         self.name = name
@@ -78,4 +80,9 @@ final class ClientProject {
         self.client = client
         self.links = links
     }
+}
+
+extension ClientProject: Hashable {
+    static func == (lhs: ClientProject, rhs: ClientProject) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
