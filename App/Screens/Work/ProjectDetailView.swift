@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ProjectDetailView: View {
   var project: ClientProject
@@ -7,8 +8,8 @@ struct ProjectDetailView: View {
   @State private var statusSheetPresented = false
   @State private var isLoading = false
 
-  private var client: Client? { store.client(project.clientID) }
   private var liveProject: ClientProject { store.project(project.id) ?? project }
+  private var client: Client? { liveProject.client }
 
   var body: some View {
     ScrollView {
@@ -180,7 +181,7 @@ struct ProjectDetailView: View {
   }
 
   private var decisionsSection: some View {
-    let items = store.decisions.filter { $0.projectID == liveProject.id }
+    let items = store.decisions.filter { $0.project?.id == liveProject.id }
     return Group {
       if !items.isEmpty {
         VStack(alignment: .leading, spacing: 10) {
@@ -214,7 +215,7 @@ struct ProjectDetailView: View {
   }
 
   private var findingsSection: some View {
-    let items = store.findings.filter { $0.projectID == liveProject.id }
+    let items = store.findings.filter { $0.project?.id == liveProject.id }
     return Group {
       if !items.isEmpty {
         VStack(alignment: .leading, spacing: 10) {
@@ -261,7 +262,7 @@ struct ProjectDetailView: View {
   private var actionsRow: some View {
     VStack(spacing: 10) {
       Button {
-        quickCapture.present(clientID: liveProject.clientID, projectID: liveProject.id, stage: .note)
+        quickCapture.present(clientID: liveProject.client?.id, projectID: liveProject.id, stage: .note)
       } label: {
         Label("Add Update", systemImage: "text.badge.plus")
           .frame(maxWidth: .infinity)
@@ -271,7 +272,7 @@ struct ProjectDetailView: View {
 
       HStack(spacing: 10) {
         Button {
-          quickCapture.present(clientID: liveProject.clientID, projectID: liveProject.id, stage: .task)
+          quickCapture.present(clientID: liveProject.client?.id, projectID: liveProject.id, stage: .task)
         } label: {
           Label("Add Task", systemImage: "checklist")
             .frame(maxWidth: .infinity)
@@ -280,7 +281,7 @@ struct ProjectDetailView: View {
         .accessibilityLabel("Add task for \(liveProject.name)")
 
         Button {
-          quickCapture.present(clientID: liveProject.clientID, projectID: liveProject.id, stage: .decision)
+          quickCapture.present(clientID: liveProject.client?.id, projectID: liveProject.id, stage: .decision)
         } label: {
           Label("Log Decision", systemImage: "checkmark.seal")
             .frame(maxWidth: .infinity)
@@ -290,7 +291,7 @@ struct ProjectDetailView: View {
       }
 
       Button {
-        quickCapture.present(clientID: liveProject.clientID, projectID: liveProject.id, stage: .finding)
+        quickCapture.present(clientID: liveProject.client?.id, projectID: liveProject.id, stage: .finding)
       } label: {
         Label("Add Finding", systemImage: "eye")
           .frame(maxWidth: .infinity)
