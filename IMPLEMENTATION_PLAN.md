@@ -1,267 +1,289 @@
-# Relay — Implementation Plan
+# Relay — Implementation Plan (Updated)
 ## Parallel Sub-Agent Build Toward "Exemplary iOS" Parity
 
 **App**: Relay (solo-crm) — Donovin's personal Client Operations / Business OS
 **Philosophy**: Audit → Optimize → Automate · Full screens to understand, bottom sheets to do
 **Design Benchmark**: [Exemplary iOS Apps — Shared Design Doctrine & Pattern Library](../../.opencode/skills/swiftui-design-skill/references/Exemplary%20iOS%20Apps%20—%20Shared%20Design%20Doctrine%20&%20Pattern%20Library.md)
-**Toolchain**: Xcode 26.6 · iOS 26 deployment target · SwiftUI · `@Observable` AppStore
-
-> **Target outcome**: Relay feels like Fabric, Brainbits, Linear, Things, Paste, Avec, and Grok Bot — *calm, structured, immediate, native, information-rich without clutter, powerful without exposing complexity.* All seven reference apps contribute a transferable *principle*; none are cloned.
+**Toolchain**: Xcode 26.6 · iOS 26 deployment target · SwiftUI · `@Observable` AppStore · SwiftData
 
 ---
 
-## How This Plan Runs
+## Current Status (as of commit `918a3c1` + local changes)
 
-This plan is designed for **parallel execution using sub-agents** (the `Task` tool with `subagent_type`). Each workstream:
-
-- Is **file-ownership isolated** so streams do not step on each other (see **Conflict Map** below).
-- Delegates to the appropriate sub-agent type and loads the matching project-local skill.
-- Ends with **verification** (a clean build + a design-review score) before merging.
-
-### Agent types available
-| Agent | Best for | Used in |
-|-------|----------|---------|
-| `explorer` | Bounded local code/config search with evidence | WS-0 (audit), any pre-flight |
-| `fixer` | Bounded mechanical implementation with file ownership + verification | WS-1, WS-2, WS-3, WS-4, WS-5 |
-| `designer` | Visual/product judgment; returns implementable recommendations | WS-6 (design direction), design review gate |
-| `librarian` | External documentation/web research with source links | WS-5 (Twenty CRM API), WS-7 (App Intents docs) |
-| `observer` | Media inspection & factual visual extraction | Screenshot QA gate |
-| `oracle` | Consequential architecture / final review (advisory, read-only) | Merge gate before commit |
-
-### Skills to load per workstream (slash-command style)
-| Skill | Applied to |
-|-------|-----------|
-| `engineering-workflow` | Every stream — execution discipline, minimal diffs, verification |
-| `swiftui-design-skill` | WS-1, WS-6 — design tokens, anti-AI-slop, 5-dimension review |
-| `swiftui-ui-patterns` | WS-1, WS-2, WS-3 — component patterns, sheets, navigation, async state |
-| `swiftui-view-refactor` | WS-1, WS-6 — splitting views, Observation ownership, MV-data flow |
-| `swiftui-liquid-glass` | WS-6 — iOS 26 glass surfaces (chips, capture bottom bar) |
-| `ios-app-intents` | WS-7 — App Shortcuts, Siri, widget surface |
-| `ios-debugger-agent` + `xcodebuildmcp` | WS-8 — build, run, simulator UI/QA |
-| `ios-simulator-browser` | WS-8 — browser-visible simulator proof |
-| `ios-ettrace-performance` | WS-8 — focused profiler evidence on the capture flow |
-| `ios-memgraph-leaks` | WS-8 — leak proof on capture/dismiss flows |
-| `swiftui-performance-audit` | WS-8 — code-first perf review of list screens |
-| `better-accessibility` | WS-2 — VoiceOver, rotor, Dynamic Type, keyboard |
-| `better-interface` | Design-review gate — holistic cross-discipline audit |
+| Stream | Status | Key Deliverables |
+|--------|--------|------------------|
+| **WS-1: Design System** | ✅ **DONE** | `App/DesignTokens.swift` (terracotta accent `#E06C4A`), `brand-spec.md`, all 6 shared components refactored to tokens |
+| **WS-2: Accessibility & States** | ✅ **DONE** | 10/10 sheets + 8/8 screens: empty/loading/error states, VoiceOver labels, rotor actions, Dynamic Type ready, reduced-motion respected |
+| **WS-7: App Intents** | ✅ **DONE** | `AddTaskIntent` (inline), `OpenClientIntent` (open-app), `ClientEntity` + query, `RelayShortcuts` provider in `App/Intents/` |
+| **WS-3: SwiftData Persistence** | 🔴 **BLOCKED** | Models converted to `@Model`, `Persistence.swift`, `AppStore` uses `@Query` + `ModelContext` — **circular relationship crash** |
+| **WS-4: Finding→Project + Command Search** | 🟡 **90% DONE** | `PromoteFindingSheet`, `FindingRow` swipe action, `SearchSheet` as command palette — **missing `promoteFindingToProject` in AppStore** |
 
 ---
 
-## Ground Rules for Every Sub-Agent
+## The Blocker: SwiftData Circular Relationships
 
-1. **Load `engineering-workflow` first.** Apply correctness > speed, minimal diffs, and verify-before-declaring-done.
-2. **Do not touch the `.xcodeproj` or `build/`** unless a stream explicitly owns that (WS-8 only). `Project.json` and `App/` are the source of authority.
-3. **Design tokens first, hard-coded values never.** Introduce `App/DesignTokens.swift` (WS-1) *before* any visual polish stream (WS-6) starts, so later streams consume tokens rather than inventing local values.
-4. **Load the matching skill and follow it literally** — e.g. `swiftui-ui-patterns` sheet rules, `swiftui-design-skill` anti-slop rules.
-5. **Every stream ends with a clean build** (`xcodebuild -scheme Relay -destination 'generic/platform=iOS Simulator' build`) before its result counts as done.
-6. **Commit only at the explicit merge gate (Step 9).** Streams leave changes on disk / on a named worktree; they do not commit.
-7. **Stay in scope.** A stream may not refactor a screen it does not own. Route cross-cutting refactors through WS-1/WS-6 or flag for the orchestrator.
+**Error**: SwiftData `@Relationship(inverse:)` macro creates circular references when *both* sides declare the inverse. Current models have bidirectional `@Relationship` on every pair (Client↔Tasks, ClientProject↔Tasks, Client↔Findings, ClientProject↔Findings, etc.).
 
----
+**Fix Required**: Remove `inverse` from the **child side** (the optional single reference), keep it only on the **parent side** (the array). Pattern:
 
-## Conflict Map (Who Owns What File)
+```swift
+// PARENT (Client) — KEEP inverse
+@Relationship(deleteRule: .cascade, inverse: \TaskItem.client)
+var tasks: [TaskItem] = []
 
-| Stream | Files it may create/modify |
-|--------|---------------------------|
-| **WS-1 Design System Foundation** | `App/DesignTokens.swift` (new), `App/Components/*` (the 6 shared components) |
-| **WS-2 Accessibility & States** | `App/Components/*`, `App/Screens/*` (adds empty/error/loading overlays + a11y), `App/Sheets/*` |
-| **WS-3 Persistence (SwiftData)** | `App/Store/AppStore.swift`, `App/Models/*` (add `@Model`), new `App/Store/Persistence.swift` |
-| **WS-4 Finding→Project Pipeline + Command Search** | `App/Sheets/SearchSheet.swift`, `App/Screens/More/FindingsView.swift`, `App/Screens/More/MoreView.swift`, `App/Store/AppStore.swift` (new methods only) |
-| **WS-5 Twenty CRM Sync** | new `App/Sync/` dir, `App/Store/AppStore.swift` (sync hooks only), `App/Info.plist` (network usage description) |
-| **WS-6 Design Direction & Liquid Glass polish** | `App/Root/RootTabView.swift`, `App/Screens/*` (polish only), `App/Sheets/*` (polish only) — **after** WS-1 tokens exist |
-| **WS-7 App Intents** | new `App/Intents/` dir, `App/App.swift` (shortcut provider wiring only) |
-| **WS-8 Build/Run & QA gate** | `.xcodeproj` (simulator run only), temporary profiling wiring (removed after) |
-
-> **Hard ordering constraints**: WS-1 must finish before WS-6. WS-3 must finish before WS-5. WS-2 and WS-4 can run in parallel with WS-1 (they mostly edit different files). WS-7 and WS-8 can start anytime. WS-8 is the final integration/QA gate.
-
----
-
-## Workstream-by-Workstream
-
-### WS-0 — Preflight Audit (orchestrator or `explorer`)
-- Confirm current screen inventory, bundle id, scheme name, deployment target.
-- Confirm `Project.json` is the source of truth (Xcode project is XcodeGen-style, `SWIFT_VERSION 5.0`, target `Relay`, iOS 26).
-- Produce the "as-is" file map. **Output**: a short findings note; no code changes.
-
----
-
-### WS-1 — Design System Foundation *(Gate for WS-6)*
-**Agent**: `fixer` · **Skill**: `swiftui-design-skill`, `swiftui-ui-patterns`
-
-Build the shared visual language the whole app consumes:
-
-1. **`App/DesignTokens.swift`** — a token file (per `swiftui-design-skill`):
-   - Semantic colors as `Color` (warm neutral palette, custom accent — not default blue), light *and* dark adapt.
-   - Spacing scale (4/8/12/16/20/24/32 — the values currently hard-coded as `16, 20, 26, 28` map to tokens).
-   - Corner-radius scale (`8/14/18/28` → tokens).
-   - Typography helpers (the existing `largeTitle.bold → body → caption` ladder codified).
-2. Refactor the **6 shared components** (`ClientRow`, `FindingRow`, `TaskRow`, `SectionLabel`, `StatusDot`, `DueDateFormatting`) to consume tokens — validate all `#Preview`s render.
-3. Add `brand-spec.md` under the skill's templates with the chosen palette + accent (source the accent intentionally, no purple-blue gradient).
-
-**Definition of done**: a single token file; all 6 components consume it; `xcodebuild` clean; `swiftui-design-skill` validation checklist passes (no banned slop, 44pt targets, dark mode defined).
-
----
-
-### WS-2 — Accessibility & State Completeness
-**Agent**: `fixer` · **Skills**: `better-accessibility`, `swiftui-ui-patterns` (async-state, loading-placeholders)
-
-Bring every list/sheet to production state completeness and accessibility parity:
-
-1. **Empty states** on `ClientsListView`, `WorkView`, `FindingsView`, `MoneyView` — a calm, guiding empty view (not a blank list).
-2. **Loading / error states** using `.task`/`.task(id:)` per `async-state.md` — skeleton placeholders in lists, a top-of-sheet inline error for save failures.
-3. **Accessibility** per `better-accessibility`:
-   - VoiceOver labels on all icon-only buttons (already partial — complete it).
-   - `.accessibilityRotor` for swipe actions on `TaskRow` (complete/snooze/waiting) and `ClientRow` (call/message).
-   - Dynamic Type sanity (verify with Large / Accessibility sizes).
-   - Keyboard: full tab order through every sheet, `.submitLabel`, focus management.
-   - `prefers-reduced-motion` respected for the capture pulse animation.
-4. **Offline/disabled states** where relevant to a save action (grey + explain, not silent).
-
-**Definition of done**: every list has a real empty state; no unlabeled icon-only control; `xcodebuild` clean; no accessibility warning in the console.
-
----
-
-### WS-3 — Persistence (SwiftData)
-**Agent**: `fixer` · **Skills**: `swiftui-view-refactor` (Observation ownership), `swiftui-ui-patterns`
-
-Move from in-memory `AppStore` to durable on-device storage. Keep the `AppStore` API surface so no screen changes are required (deferral principle):
-
-1. Convert `Client`, `ContactPerson`, `ClientProject`, `TaskItem`, `Finding`, `Decision`, `PaymentRecord`, `ActivityEvent`, `Note` to SwiftData `@Model` (iOS 17+; target is 26 so fully available).
-2. Stand up `ModelContainer` + a `Persistence.swift` service. Keep `@Observable AppStore` as the in-memory facade that seeds from seed data on first launch and flushes through the model.
-3. Preserve computed fields (`remaining`, lookups, aggregates) as non-persisted convenience.
-4. Seed data migration: keep the sample Roscoe/Rockford clients as the initial dataset.
-
-**Definition of done**: app persists across relaunch; all existing mutations (add task/note/finding/decision/payment, status change, toggle) survive; `xcodebuild` clean. **This is the gate for WS-5.**
-
----
-
-### WS-4 — Finding→Project Pipeline + Command-Enabled Search
-**Agent**: `fixer` · **Skills**: `swiftui-ui-patterns` (searchable, navigationstack, deeplinks), `swiftui-design-skill`
-
-Two user-visible wins that directly serve Audit→Optimize→Automate:
-
-1. **Finding → Optimization Opportunity → Project**: On `FindingRow` add a "Promote to project" action that creates a `ClientProject` from the finding (status `inProgress`), logs an `ActivityEvent` linking finding→project, and lets the user give it a name/phase. This closes the audit loop.
-2. **True command palette search** (`SearchSheet`): "Search or do anything" becomes a first-class command surface — recent searches, and **actions as first-class results** (e.g. "Add task for Pietro's", "Record payment", "Call X") that dispatch into Quick Capture prefilled with the matched client. Follow `searchable.md` + `deeplinks.md` routing patterns.
-
-**Definition of done**: a finding can become a project in ≤3 taps; `SearchSheet` returns actions alongside rich results; `xcodebuild` clean.
-
----
-
-### WS-5 — Twenty CRM Backend Sync *(after WS-3)*
-**Agent**: `librarian` (design) → `fixer` (implement) · **Skills**: `engineering-workflow`
-
-Make Twenty CRM the durable source of truth without slowing the UI (doctrine §15: software should feel faster than its backend):
-
-1. **Research phase (`librarian`)**: confirm the Twenty CRM public REST/GraphQL API + auth method; document the endpoint surface for clients/projects/tasks/findings/payments.
-2. **Implement phase (`fixer`)**:
-   - `App/Sync/TwentySyncEngine.swift` — background sync: push mutations, pull changes.
-   - **Optimistic updates**: local mutation applies instantly, sync reconciles later; conflict resolution favors most-recent.
-   - **Visible sync state**: a quiet status indicator (green Synced / amber Syncing / red Offline) + "last synced" — per doctrine §17 Trust.
-   - Never fake success for payments (financially meaningful) — those require confirmed write before showing success.
-3. Add `NSAppTransportSecurity`/network usage description to `Info.plist` as needed.
-
-**Definition of done**: mutations survive relaunch locally *and* reach Twenty (or clearly report offline); sync status is visible; payments only succeed on confirmed write; `xcodebuild` clean.
-
----
-
-### WS-6 — Design Direction, Signature Detail & Liquid Glass Polish *(after WS-1)*
-**Agent**: `designer` (direction) → `fixer` (implement) · **Skills**: `swiftui-design-skill`, `swiftui-liquid-glass`, `swiftui-view-refactor`
-
-The "delve-able delight" layer. Two optional-but-powerful iOS 26 moves plus a signature detail per screen:
-
-1. **Design review first (`designer`)**: score the current screens on the 5-Dimension Review; identify the *one signature detail per screen* (doctrine §3, §21: one thing at 120%).
-2. **Implement polish (`fixer`)**:
-   - Refactor the largest screens (`TodayView`, `ClientDetailView`, `ProjectDetailView`) into small dedicated subview types per `swiftui-view-refactor` (they exceed the ~300-line guideline and mix layout+logic). Do **not** change behavior.
-   - **Liquid Glass chipping** (`swiftui-liquid-glass`): glass treatment for the capture pill, status chips, and project link capsules — gated `#available(iOS 26, *)` with non-glass fallback (doctrine §4 native-first, §21 avoid glass-everywhere).
-   - Apply the signature detail(s) chosen by the designer.
-3. **Re-run the 5-Dimension Review** — every dimension ≥ 7, none below 5 (shipping threshold).
-
-**Definition of done**: screens refactored into small views (no giant computed-`some View` screens); Liquid Glass present with fallback; design review avg ≥ 7; `xcodebuild` clean.
-
----
-
-### WS-7 — App Intents & System Surfaces
-**Agent**: `fixer` · **Skill**: `ios-app-intents`
-
-Expose the highest-value verbs to Shortcuts/Siri/Spotlight (doctrine §6, §12 — capture beyond the app UI). Start narrow per `ios-app-intents`:
-
-1. **One open-app intent**: "Open [client] in Relay" → routes to `ClientDetailView` (runtime handoff via the root router).
-2. **One inline action intent**: "Add task to [client]" completing within the shortcut without opening the app.
-3. **One entity**: `Client` as an `AppEntity` with an `EntityQuery` for disambiguation.
-4. **`AppShortcutsProvider`** with task-oriented phrases + SF Symbols.
-5. Wire a single predictable intent-routing surface into `RootTabView`/`ContentView`.
-
-**Definition of done**: intents target compiles; opening the app routes to the right place; shortcuts phrases discoverable; `xcodebuild` clean.
-
----
-
-### WS-8 — Build, Run & QA Gate *(final integration)*
-**Agent**: orchestrator + `observer` · **Skills**: `ios-debugger-agent` (+`xcodebuildmcp`), `ios-simulator-browser`, `ios-ettrace-performance`, `swiftui-performance-audit`
-
-The merge gate. Sequence:
-
-1. **Build + run** on a booted simulator via `ios-debugger-agent` (`xcodebuildmcp`).
-2. **UI QA**: walk Today → Clients → ClientDetail → ProjectDetail → Quick Capture (all stages) → Search → Findings → Money. Capture screenshots (`ios-simulator-browser` for proof).
-3. **Focused perf** (`ios-ettrace-performance`) on the capture flow: Quick Capture open → save → dismiss. Report one clean trace.
-4. **Leak check** (`ios-memgraph-leaks`) on the capture/dismiss and sheet open/close flows. Prove no app-owned leaks on the common paths.
-5. **Code-first perf review** (`swiftui-performance-audit`) of the Now-scrolling list screens (Today, Clients) for invalidation storms / unstable identity.
-6. **Design review re-run** (`better-interface` holistic audit) for the final cross-discipline pass.
-
-**Definition of done**: all flows work on simulator; screenshots captured; capture-flow trace clean; no app-owned leaks; design audit green.
-
----
-
-## Execution & Orchestration
-
-### Recommended launch order (parallel where the Conflict Map allows)
-
-```
-Wave A (parallel):  WS-1 Design System  |  WS-2 A11y & States  |  WS-7 App Intents
-Wave B (parallel):  WS-3 Persistence (needs nothing from A)   |  WS-4 Pipeline+Search
-Wave C (parallel):  WS-6 Design Polish (after WS-1)           |  WS-5 Twenty Sync (after WS-3)
-Wave D (gate):      WS-8 Build/Run/QA (all above)
+// CHILD (TaskItem) — REMOVE inverse
+@Relationship var client: Client?
 ```
 
-Dispatch each as a separate `Task` call with the correct `subagent_type`, giving each stream:
-- Its **file-ownership boundary** (from the Conflict Map).
-- The **skills to load** and the exact reference file(s) to follow.
-- Its **Definition of done** (verify with a clean `xcodebuild`).
-- The instruction: **do not commit**, leave changes on disk.
-- The instruction to **not touch** other streams' files.
-
-### Merge gate (Step 9)
-Before any commit:
-1. Review the full diff across all streams (`oracle` for final advisory read of architecture + diff).
-2. Resolve cross-stream touch points (WS-1 tokens consumed by WS-6; WS-3 persistence consumed by WS-5).
-3. Only on **explicit user approval** run the commit(s) — match repo style, stage only intended files, never commit secrets (Twenty credentials stay in keychain/env, not source).
-
----
-
-## Verification Checklist (run at the merge gate)
-
-- [ ] `xcodebuild -scheme Relay -destination 'generic/platform=iOS Simulator' build` passes clean.
-- [ ] App persists across relaunch (WS-3).
-- [ ] Findings can promote to projects; Search returns actions (WS-4).
-- [ ] Twenty sync shows green/amber/red status; payments never fake success (WS-5).
-- [ ] Liquid Glass present with non-glass fallback; Design Tokens consumed everywhere (WS-1+6).
-- [ ] All screens have empty/loading/error states (WS-2).
-- [ ] App Intents compile; open/action intents route correctly (WS-7).
-- [ ] Simulator screenshots captured (WS-8); capture-flow trace clean; no app-owned leaks.
-- [ ] 5-Dimension Design Review avg ≥ 7 across key screens (WS-6).
-- [ ] No unlabeled icon-only controls; Dynamic Type OK; reduced-motion respected (WS-2).
-- [ ] No secrets committed (WS-5).
+**Affected pairs** (8 total):
+- Client.tasks ↔ TaskItem.client
+- ClientProject.tasks ↔ TaskItem.project
+- Client.findings ↔ Finding.client
+- ClientProject.findings ↔ Finding.project
+- Client.decisions ↔ Decision.client
+- ClientProject.decisions ↔ Decision.project
+- Client.payments ↔ PaymentRecord.client
+- ClientProject.payments ↔ PaymentRecord.project
+- Client.activity ↔ ActivityEvent.client
+- ClientProject.activity ↔ ActivityEvent.project
+- Client.notes ↔ Note.client
 
 ---
 
-## Anti-Pattern Guardrails (from the Doctrines — keep visible while working)
+## Updated Wave Plan
 
-- ❌ No purple-blue gradients, no glass-everywhere, no card-inside-card, no giant gradient CTAs.
-- ❌ No mandatory-metadata capture — root capture stays "just type/speak it", organize later.
-- ❌ No full-screen navigation for tiny contextual tasks — bottom sheets are the "doing" layer.
-- ❌ No CRM-database terminology in everyday navigation (keep Today/Clients/Projects/Capture).
-- ❌ No asking the user to experience backend latency the UI can safely absorb.
-- ✅ Calm. Structured. Immediate. Native-feeling. Information-rich without clutter.
+### Wave B — Fix WS-3 + Complete WS-4 (PARALLEL)
+
+| Stream | Agent | Dependencies | Files |
+|--------|-------|--------------|-------|
+| **WS-3-FIX** | `fixer` | None | All `App/Models/*.swift` (remove inverse from child sides) |
+| **WS-4-COMPLETE** | `fixer` | None | `App/Store/AppStore.swift` (add `promoteFindingToProject`), `App/Screens/Work/ProjectDetailView.swift` (navigation after promote) |
+
+**WS-3-FIX Definition of Done**:
+- `xcodebuild` clean
+- All models compile without circular reference errors
+- App persists across simulator relaunch
+- All existing mutations work identically
+
+**WS-4-COMPLETE Definition of Done**:
+- `promoteFindingToProject` method added to `AppStore`
+- Finding → Promote → name/phase → save → lands in `ProjectDetailView` (≤3 taps)
+- `SearchSheet` actions execute + dismiss correctly
+- `xcodebuild` clean
 
 ---
 
-*Generated as the working orchestration plan for Relay. Each stream is independently verifiable; the merge gate is the only serialization point that requires human decision.*
+### Wave C — WS-5 + WS-6 (PARALLEL, after Wave B)
+
+| Stream | Agent | Dependencies | Files |
+|--------|-------|--------------|-------|
+| **WS-5: Twenty CRM Sync** | `librarian` → `fixer` | WS-3-FIX | New `App/Sync/`, `AppStore` sync hooks, `Info.plist` |
+| **WS-6: Design Polish + Liquid Glass** | `designer` → `fixer` | WS-1 (tokens) | `App/Root/RootTabView.swift`, `App/Screens/*`, `App/Sheets/*` |
+
+**WS-5**: Optimistic sync with visible status (green/amber/red), payments never fake success.
+**WS-6**: Refactor large screens into subviews, add Liquid Glass to capture pill/chips (iOS 26 gated), one signature detail per screen, 5-Dimension Review ≥ 7.
+
+---
+
+### Wave D — WS-8 (FINAL GATE)
+
+| Stream | Agent | Dependencies |
+|--------|-------|--------------|
+| **WS-8: Build/Run/QA** | orchestrator + `observer` | All above |
+
+- `ios-debugger-agent` + `xcodebuildmcp`: build, run, simulator walkthrough
+- `ios-simulator-browser`: screenshot proof
+- `ios-ettrace-performance`: capture flow trace
+- `ios-memgraph-leaks`: capture/dismiss leak check
+- `swiftui-performance-audit`: list screen invalidation review
+- `better-interface`: final holistic design audit
+
+---
+
+## Detailed Workstream Specs
+
+---
+
+### WS-3-FIX: Resolve SwiftData Circular References
+**Agent**: `fixer` · **Skill**: `swiftui-view-refactor`
+
+**Files to modify** (all in `App/Models/`):
+- `Client.swift`
+- `ClientProject.swift`
+- `TaskItem.swift`
+- `Finding.swift`
+- `Decision.swift`
+- `PaymentRecord.swift`
+- `ActivityEvent.swift`
+- `Note.swift`
+
+**Pattern for each pair**:
+```swift
+// Parent side (array) — KEEP @Relationship(deleteRule: .cascade, inverse: \Child.parent)
+@Relationship(deleteRule: .cascade, inverse: \TaskItem.client)
+var tasks: [TaskItem] = []
+
+// Child side (optional single) — REMOVE inverse, just @Relationship
+@Relationship var client: Client?
+```
+
+**Exception**: `ContactPerson.client` — keep inverse on both sides (1:1-ish, no cascade issue typically).
+
+**Verification**:
+```bash
+xcodebuild -scheme Relay -destination 'generic/platform=iOS Simulator' build
+```
+Must pass clean. Then: quit simulator, relaunch app — all seed data + any new entries must persist.
+
+---
+
+### WS-4-COMPLETE: Wire Promote Flow + Polish Search
+**Agent**: `fixer` · **Skills**: `swiftui-ui-patterns` (navigationstack, sheets)
+
+#### 1. Add `promoteFindingToProject` to `AppStore.swift`
+```swift
+func promoteFindingToProject(_ finding: Finding, name: String, phase: String) -> ClientProject {
+    let project = ClientProject(
+        client: finding.client!,
+        name: name,
+        phase: phase,
+        status: .inProgress,
+        nextAction: "Scope automation",
+        projectValue: 0,
+        paidAmount: 0,
+        links: []
+    )
+    modelContext.insert(project)
+    
+    // Link finding to new project
+    finding.project = project
+    finding.status = .investigating
+    
+    // Activity + Decision
+    let activityEvent = ActivityEvent(client: finding.client!, project: project, text: "Promoted finding to project: \(name)")
+    modelContext.insert(activityEvent)
+    
+    let decision = Decision(client: finding.client!, project: project, text: "Automation opportunity identified from: \(finding.text)")
+    modelContext.insert(decision)
+    
+    try? modelContext.save()
+    return project
+}
+```
+
+#### 2. Navigation after promote
+In `PromoteFindingSheet.save()`: after `store.promoteFindingToProject`, the sheet dismisses. Need to push `ProjectDetailView` for the new project.
+
+**Option A** (simplest): `PromoteFindingSheet` takes a callback `(ClientProject) -> Void` that the parent (`FindingsView` or `ClientDetailView`) uses to push navigation.
+
+**Option B**: Use a shared navigation path in `RootTabView` (like `deepLinkClientID`).
+
+**Recommended**: Add `@Binding var navigationPath: NavigationPath` to `PromoteFindingSheet` and push the project.
+
+---
+
+### WS-5: Twenty CRM Sync
+**Agent**: `librarian` (research) → `fixer` (implement)
+
+**Research** (`librarian`):
+- Twenty CRM API endpoints (REST/GraphQL), auth, rate limits
+- Document: `/Users/forex/solo-crm/TWENTY_API.md`
+
+**Implement** (`fixer`):
+- `App/Sync/TwentySyncEngine.swift` — background actor
+- Push local mutations (tasks, findings, decisions, payments) → Twenty
+- Pull remote changes → merge (last-write-wins, conflict UI if needed)
+- **Optimistic UI**: local mutation applies instantly, sync reconciles
+- **Visible sync status**: tiny indicator in tab bar (green=Synced, amber=Syncing, red=Offline)
+- **Payments**: never fake success — require confirmed write
+
+---
+
+### WS-6: Design Polish + Liquid Glass
+**Agent**: `designer` (direction) → `fixer` (implement)
+
+**Phase 1 — Designer Review** (1 hour):
+- Score all 8 key screens on 5-Dimension Review
+- Pick **one signature detail per screen** (120% effort)
+- Choose Liquid Glass targets: capture pill, status chips, project link capsules
+
+**Phase 2 — Fixer Implementation**:
+1. **Refactor large screens** (`TodayView`, `ClientDetailView`, `ProjectDetailView`) into dedicated subview types per `swiftui-view-refactor` (no giant computed `some View` blocks)
+2. **Liquid Glass** (iOS 26 gated):
+   ```swift
+   if #available(iOS 26, *) {
+       CapturePill().glassEffect(.regular.interactive(), in: .circle)
+       StatusChip().glassEffect(.regular, in: .capsule)
+   } else {
+       // material fallback
+   }
+   ```
+3. **DesignTokens everywhere** — verify no hardcoded spacing/colors remain
+4. **Re-run 5-Dimension Review** — all ≥ 7, none < 5
+
+---
+
+### WS-8: QA Gate
+**Agent**: orchestrator + `observer` · **Skills**: `ios-debugger-agent`, `ios-simulator-browser`, `ios-ettrace-performance`, `ios-memgraph-leaks`, `swiftui-performance-audit`, `better-interface`
+
+**Checklist**:
+- [ ] Clean build (`xcodebuild` + Xcode)
+- [ ] Simulator walkthrough: Today → Clients → ClientDetail → ProjectDetail → Quick Capture (all stages) → Search → Findings → Money
+- [ ] Capture flow ETTrace: open → save → dismiss (no spikes)
+- [ ] Memgraph: capture/dismiss + sheet open/close (no app-owned leaks)
+- [ ] Perf audit: Today/Clients list scrolling (no invalidation storms)
+- [ ] Design audit: `better-interface` holistic pass
+- [ ] Screenshots captured via `ios-simulator-browser`
+
+---
+
+## File Ownership Map (for parallel agents)
+
+| Stream | Creates/Modifies |
+|--------|------------------|
+| WS-3-FIX | `App/Models/*.swift` (8 files) |
+| WS-4-COMPLETE | `App/Store/AppStore.swift`, `App/Sheets/PromoteFindingSheet.swift`, `App/Screens/More/FindingsView.swift` |
+| WS-5 | `App/Sync/`, `App/Store/AppStore.swift` (hooks), `App/Info.plist` |
+| WS-6 | `App/Root/RootTabView.swift`, `App/Screens/*`, `App/Sheets/*` (polish only) |
+| WS-8 | `.xcodeproj` (simulator run only), temp profiling wiring |
+
+---
+
+## Anti-Pattern Guardrails (from Doctrine)
+
+- ❌ No purple-blue gradients, no glass-everywhere, no card-in-card
+- ❌ No mandatory-metadata capture — root capture = "just type/speak"
+- ❌ No full-screen nav for tiny tasks — bottom sheets = doing layer
+- ❌ No CRM terminology in nav (keep Today/Clients/Projects/Capture)
+- ❌ No exposing backend latency UI can absorb
+- ✅ Calm. Structured. Immediate. Native. Info-rich not cluttered.
+
+---
+
+## Handoff Notes for Grokbot
+
+1. **Start with Wave B** — both streams independent, can run parallel
+2. **WS-3-FIX is the critical path** — everything else needs clean build
+3. **WS-4-COMPLETE is trivial** — just add the one AppStore method + nav callback
+4. **DesignTokens.swift is the source of truth** — all visual work consumes it
+5. **Run `xcodebuild` after every stream** — clean build = done
+6. **Don't commit until merge gate** — leave changes on disk, human approves
+
+---
+
+## Quick Commands
+
+```bash
+# Build check
+xcodebuild -scheme Relay -destination 'generic/platform=iOS Simulator' build
+
+# Regenerate Xcode project (if Project.json changes)
+cd /Users/forex/solo-crm && xcodegen generate --spec Project.json
+
+# Simulator list
+xcrun simctl list devices available
+```
+
+---
+
+*This plan reflects actual repository state as of local changes on branch `improve-native-ux`. Wave A (WS-1, WS-2, WS-7) complete and building cleanly. Wave B blocked on SwiftData circular reference fix.*
