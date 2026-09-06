@@ -8,7 +8,7 @@ struct PromoteFindingSheet: View {
   @State private var phase = ""
   @State private var saved = false
   @State private var isSaving = false
-  @State private var saveError: Error?
+  @State private var saveError: String?
   @FocusState private var nameFocused: Bool
 
   private var suggestedName: String {
@@ -73,7 +73,7 @@ struct PromoteFindingSheet: View {
             HStack {
               Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)
-              Text(error.localizedDescription)
+              Text(error)
                 .font(.footnote)
                 .foregroundStyle(.red)
               Spacer()
@@ -127,20 +127,11 @@ struct PromoteFindingSheet: View {
     saveError = nil
     defer { isSaving = false }
 
-    do {
-      let project = store.promoteFindingToProject(finding, name: trimmedName, phase: trimmedPhase)
-      saved.toggle()
-      dismiss()
-      // Navigate to project detail - handled by parent via navigation destination
-    } catch {
-      saveError = error
+    if store.promoteFindingToProject(finding, name: trimmedName, phase: trimmedPhase) == nil {
+      saveError = "Finding is missing a client link."
+      return
     }
+    saved.toggle()
+    dismiss()
   }
-}
-
-#Preview {
-  @Previewable @State var store = AppStore()
-  @Previewable @State var finding = store.findings[0]
-  PromoteFindingSheet(finding: finding)
-    .environment(store)
 }

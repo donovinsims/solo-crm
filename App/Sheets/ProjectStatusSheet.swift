@@ -67,7 +67,7 @@ struct ProjectStatusSheet: View {
     Button {
       dismiss()
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-        quickCapture.present(clientID: project.clientID, projectID: project.id, stage: stage)
+        quickCapture.present(clientID: project.client?.id, projectID: project.id, stage: stage)
       }
     } label: {
       Label(title, systemImage: systemImage)
