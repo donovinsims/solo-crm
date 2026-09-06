@@ -25,10 +25,10 @@ struct TaskRow: View {
           .strikethrough(task.isCompleted, color: DesignTokens.textSecondary)
 
         HStack(spacing: DesignTokens.spaceS) {
-          if let client = store.client(task.clientID) {
+          if let client = task.client {
             Text(client.name)
           }
-          if let projectID = task.projectID, let project = store.project(projectID) {
+          if let project = task.project {
             Text("·")
             Text(project.name)
           }

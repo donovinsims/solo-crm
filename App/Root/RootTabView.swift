@@ -2,7 +2,7 @@ import SwiftUI
 import AppIntents
 
 struct RootTabView: View {
-  @State private var store = AppStore()
+  @Environment(AppStore.self) private var store
   @State private var quickCapture = QuickCaptureState()
   @State private var selectedTab: RootTab = .today
   @State private var searchPresented = false
@@ -30,7 +30,6 @@ struct RootTabView: View {
       }
       .sensoryFeedback(.impact(weight: .light, intensity: 0.8), trigger: captureTrigger)
     }
-    .environment(store)
     .environment(quickCapture)
     .sheet(isPresented: $quickCapture.isPresented) {
       QuickCaptureSheet()
@@ -40,6 +39,7 @@ struct RootTabView: View {
     .sheet(isPresented: $searchPresented) {
       SearchSheet()
         .environment(store)
+        .environment(quickCapture)
     }
     .onOpenURL { url in
       handleDeepLink(url)

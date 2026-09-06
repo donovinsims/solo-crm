@@ -13,7 +13,7 @@ struct FindingRow: View {
         .accessibilityHidden(false)
 
       VStack(alignment: .leading, spacing: DesignTokens.spaceXS) {
-        if let client = store.client(finding.clientID) {
+        if let client = finding.client {
           Text(client.name)
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(DesignTokens.textSecondary)

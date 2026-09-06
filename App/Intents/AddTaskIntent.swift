@@ -8,7 +8,7 @@ enum DueOption: String, AppEnum {
     case thisWeek = "This Week"
     case nextWeek = "Next Week"
     case custom = "Custom"
-    
+
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Due"
     static var caseDisplayRepresentations: [DueOption: DisplayRepresentation] = [
         .today: "Today",
@@ -21,6 +21,7 @@ enum DueOption: String, AppEnum {
 
 @available(iOS 16, *)
 struct ClientOptionsProvider: DynamicOptionsProvider {
+    @MainActor
     func results() async throws -> [ClientEntity] {
         try await ClientEntityQuery().suggestedEntities()
     }
@@ -31,16 +32,17 @@ struct AddTaskIntent: AppIntent {
     static var title: LocalizedStringResource = "Add Task"
     static var description = IntentDescription("Add a task for a client")
     static var openAppWhenRun = false
-    
+
     @Parameter(title: "Client", optionsProvider: ClientOptionsProvider())
     var client: ClientEntity?
-    
+
     @Parameter(title: "Task Title", requestValueDialog: "What needs to happen?")
     var title: String
-    
+
     @Parameter(title: "Due", default: .today)
     var dueDate: DueOption?
-    
+
+    @MainActor
     func perform() async throws -> some IntentResult {
         let due: Date?
         switch dueDate {
@@ -55,14 +57,14 @@ struct AddTaskIntent: AppIntent {
         case .custom, .none:
             due = nil
         }
-        
+
         IntentAppStore.shared.addTask(
             title: title,
             clientID: client?.id,
             projectID: nil,
             dueDate: due
         )
-        
+
         let clientName = client?.name ?? "no client"
         return .result(dialog: "Added \"\(title)\" for \(clientName)")
     }
