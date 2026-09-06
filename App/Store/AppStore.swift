@@ -262,4 +262,41 @@ final class AppStore {
     projects[index].status = status
     activity.insert(ActivityEvent(clientID: project.clientID, projectID: project.id, text: "Status changed to \(status.rawValue)"), at: 0)
   }
+
+  // MARK: - Finding Promotion
+
+  func promoteFindingToProject(_ finding: Finding, name: String, phase: String) -> ClientProject {
+    let project = ClientProject(
+      clientID: finding.clientID,
+      name: name,
+      phase: phase,
+      status: .inProgress,
+      nextAction: "Scope automation",
+      projectValue: 0,
+      paidAmount: 0
+    )
+    projects.insert(project, at: 0)
+
+    // Update finding
+    if let idx = findings.firstIndex(where: { $0.id == finding.id }) {
+      findings[idx].projectID = project.id
+      findings[idx].status = .investigating
+    }
+
+    // Activity
+    activity.insert(ActivityEvent(
+      clientID: finding.clientID,
+      projectID: project.id,
+      text: "Promoted finding to project: \(name)"
+    ), at: 0)
+
+    // Decision
+    decisions.insert(Decision(
+      clientID: finding.clientID,
+      projectID: project.id,
+      text: "Automation opportunity identified from: \(finding.text)"
+    ), at: 0)
+
+    return project
+  }
 }

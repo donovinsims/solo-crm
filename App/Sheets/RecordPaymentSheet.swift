@@ -8,6 +8,8 @@ struct RecordPaymentSheet: View {
   @State private var amountText = ""
   @State private var method: PaymentMethod = .ach
   @State private var saved = false
+  @State private var isSaving = false
+  @State private var saveError: Error?
   @FocusState private var amountFocused: Bool
 
   private var project: ClientProject? { store.project(projectID) }
@@ -23,6 +25,8 @@ struct RecordPaymentSheet: View {
         }
         .pickerStyle(.menu)
         .labelsHidden()
+        .accessibilityLabel("Select client")
+        .accessibilityHint("Choose which client this payment is for")
       }
 
       if let clientID {
@@ -35,6 +39,8 @@ struct RecordPaymentSheet: View {
           }
           .pickerStyle(.menu)
           .labelsHidden()
+          .accessibilityLabel("Select project")
+          .accessibilityHint("Choose which project this payment applies to")
         }
       }
 
@@ -53,6 +59,10 @@ struct RecordPaymentSheet: View {
             Text("$\(Int(project.paidAmount))")
           }
         }
+      } else if clientID != nil {
+        Section {
+          InlineEmptyState(systemImage: "dollarsign.circle", message: "Select a project to record payment")
+        }
       }
 
       Section("Amount Received") {
@@ -62,6 +72,8 @@ struct RecordPaymentSheet: View {
           TextField("0", text: $amountText)
             .keyboardType(.decimalPad)
             .focused($amountFocused)
+            .submitLabel(.done)
+            .onSubmit { save() }
         }
       }
 
@@ -73,6 +85,8 @@ struct RecordPaymentSheet: View {
         }
         .pickerStyle(.inline)
         .labelsHidden()
+        .accessibilityLabel("Payment method")
+        .accessibilityHint("Select how the payment was received")
       }
 
       Section("Date") {
@@ -80,15 +94,36 @@ struct RecordPaymentSheet: View {
           .foregroundStyle(.secondary)
       }
 
+      if let error = saveError {
+        Section {
+          HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundStyle(.red)
+            Text(error.localizedDescription)
+              .font(.footnote)
+              .foregroundStyle(.red)
+            Spacer()
+            Button("Retry") { save() }
+              .font(.footnote.weight(.semibold))
+              .buttonStyle(.bordered)
+          }
+        }
+      }
+
       Section {
         Button {
           save()
         } label: {
-          Text("Record Payment")
-            .font(.body.weight(.semibold))
-            .frame(maxWidth: .infinity)
+          if isSaving {
+            ProgressView()
+              .frame(maxWidth: .infinity, minHeight: 44)
+          } else {
+            Text("Record Payment")
+              .font(.body.weight(.semibold))
+              .frame(maxWidth: .infinity, minHeight: 44)
+          }
         }
-        .disabled(project == nil || Double(amountText) == nil)
+        .disabled(project == nil || Double(amountText) == nil || isSaving)
       }
     }
     .navigationTitle("Record Payment")
@@ -103,8 +138,16 @@ struct RecordPaymentSheet: View {
 
   private func save() {
     guard let clientID, let projectID, let amount = Double(amountText) else { return }
-    store.recordPayment(clientID: clientID, projectID: projectID, amount: amount, method: method)
-    saved.toggle()
-    quickCapture.dismiss()
+    isSaving = true
+    saveError = nil
+    defer { isSaving = false }
+
+    do {
+      store.recordPayment(clientID: clientID, projectID: projectID, amount: amount, method: method)
+      saved.toggle()
+      quickCapture.dismiss()
+    } catch {
+      saveError = error
+    }
   }
 }

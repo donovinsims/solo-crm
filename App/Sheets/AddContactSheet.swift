@@ -9,6 +9,8 @@ struct AddContactSheet: View {
   @State private var phone = ""
   @State private var email = ""
   @State private var saved = false
+  @State private var isSaving = false
+  @State private var saveError: Error?
   @FocusState private var nameFocused: Bool
 
   var body: some View {
@@ -22,24 +24,56 @@ struct AddContactSheet: View {
         }
         .pickerStyle(.menu)
         .labelsHidden()
+        .accessibilityLabel("Select client")
+        .accessibilityHint("Choose which client this contact belongs to")
       }
 
       Section("Contact") {
-        TextField("Name", text: $name).focused($nameFocused)
+        TextField("Name", text: $name)
+          .focused($nameFocused)
+          .submitLabel(.next)
         TextField("Role", text: $role)
-        TextField("Phone", text: $phone).keyboardType(.phonePad)
-        TextField("Email", text: $email).keyboardType(.emailAddress).textInputAutocapitalization(.never)
+          .submitLabel(.next)
+        TextField("Phone", text: $phone)
+          .keyboardType(.phonePad)
+          .submitLabel(.next)
+        TextField("Email", text: $email)
+          .keyboardType(.emailAddress)
+          .textInputAutocapitalization(.never)
+          .submitLabel(.done)
+          .onSubmit { save() }
+      }
+
+      if let error = saveError {
+        Section {
+          HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundStyle(.red)
+            Text(error.localizedDescription)
+              .font(.footnote)
+              .foregroundStyle(.red)
+            Spacer()
+            Button("Retry") { save() }
+              .font(.footnote.weight(.semibold))
+              .buttonStyle(.bordered)
+          }
+        }
       }
 
       Section {
         Button {
           save()
         } label: {
-          Text("Add Contact")
-            .font(.body.weight(.semibold))
-            .frame(maxWidth: .infinity)
+          if isSaving {
+            ProgressView()
+              .frame(maxWidth: .infinity, minHeight: 44)
+          } else {
+            Text("Add Contact")
+              .font(.body.weight(.semibold))
+              .frame(maxWidth: .infinity, minHeight: 44)
+          }
         }
-        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || clientID == nil)
+        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || clientID == nil || isSaving)
       }
     }
     .navigationTitle("New Contact")
@@ -52,8 +86,17 @@ struct AddContactSheet: View {
   }
 
   private func save() {
-    store.addContact(name: name.trimmingCharacters(in: .whitespaces), role: role, phone: phone, email: email, clientID: clientID)
-    saved.toggle()
-    quickCapture.dismiss()
+    guard let clientID else { return }
+    isSaving = true
+    saveError = nil
+    defer { isSaving = false }
+
+    do {
+      store.addContact(name: name.trimmingCharacters(in: .whitespaces), role: role, phone: phone, email: email, clientID: clientID)
+      saved.toggle()
+      quickCapture.dismiss()
+    } catch {
+      saveError = error
+    }
   }
 }

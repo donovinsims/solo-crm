@@ -1,19 +1,22 @@
+import Foundation
 import SwiftUI
 
-enum SemanticTint {
-  case accent
-  case green
-  case amber
-  case red
-  case gray
+enum SemanticTint: String, CaseIterable, Identifiable, Codable {
+    case accent
+    case amber
+    case red
+    case green
+    case gray
 
-  var color: Color {
-    switch self {
-    case .accent: .accentColor
-    case .green: .green
-    case .amber: .orange
-    case .red: .red
-    case .gray: .secondary
+    var id: String { rawValue }
+
+    var color: Color {
+        switch self {
+        case .accent: .accentColor
+        case .amber: .orange
+        case .red: .red
+        case .green: .green
+        case .gray: .gray
+        }
     }
-  }
 }

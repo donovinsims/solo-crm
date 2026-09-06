@@ -7,6 +7,8 @@ struct CreateDecisionSheet: View {
   @State private var projectID: ClientProject.ID?
   @State private var text = ""
   @State private var saved = false
+  @State private var isSaving = false
+  @State private var saveError: Error?
   @FocusState private var focused: Bool
 
   var body: some View {
@@ -20,12 +22,16 @@ struct CreateDecisionSheet: View {
         }
         .pickerStyle(.menu)
         .labelsHidden()
+        .accessibilityLabel("Select client")
+        .accessibilityHint("Choose which client this decision belongs to")
       }
 
       Section("What was decided?") {
         TextField("Online ordering must be completed before launching the website.", text: $text, axis: .vertical)
           .lineLimit(4...8)
           .focused($focused)
+          .submitLabel(.done)
+          .onSubmit { save() }
       }
 
       if let clientID, !store.projects(for: clientID).isEmpty {
@@ -38,6 +44,24 @@ struct CreateDecisionSheet: View {
           }
           .pickerStyle(.menu)
           .labelsHidden()
+          .accessibilityLabel("Select project")
+          .accessibilityHint("Choose which project this decision relates to")
+        }
+      }
+
+      if let error = saveError {
+        Section {
+          HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundStyle(.red)
+            Text(error.localizedDescription)
+              .font(.footnote)
+              .foregroundStyle(.red)
+            Spacer()
+            Button("Retry") { save() }
+              .font(.footnote.weight(.semibold))
+              .buttonStyle(.bordered)
+          }
         }
       }
 
@@ -45,11 +69,16 @@ struct CreateDecisionSheet: View {
         Button {
           save()
         } label: {
-          Text("Save Decision")
-            .font(.body.weight(.semibold))
-            .frame(maxWidth: .infinity)
+          if isSaving {
+            ProgressView()
+              .frame(maxWidth: .infinity, minHeight: 44)
+          } else {
+            Text("Save Decision")
+              .font(.body.weight(.semibold))
+              .frame(maxWidth: .infinity, minHeight: 44)
+          }
         }
-        .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || clientID == nil)
+        .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || clientID == nil || isSaving)
       }
     }
     .navigationTitle("Log Decision")
@@ -64,8 +93,16 @@ struct CreateDecisionSheet: View {
 
   private func save() {
     guard let clientID else { return }
-    store.addDecision(text: text.trimmingCharacters(in: .whitespaces), clientID: clientID, projectID: projectID)
-    saved.toggle()
-    quickCapture.dismiss()
+    isSaving = true
+    saveError = nil
+    defer { isSaving = false }
+
+    do {
+      store.addDecision(text: text.trimmingCharacters(in: .whitespaces), clientID: clientID, projectID: projectID)
+      saved.toggle()
+      quickCapture.dismiss()
+    } catch {
+      saveError = error
+    }
   }
 }

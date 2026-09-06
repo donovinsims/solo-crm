@@ -4,10 +4,16 @@ import UIKit
 struct SearchSheet: View {
   @Environment(AppStore.self) private var store
   @Environment(\.dismiss) private var dismiss
+  @Environment(QuickCaptureState.self) private var quickCapture
   @State private var query = ""
   @State private var selectedClient: Client?
   @State private var selectedProject: ClientProject?
   @FocusState private var focused: Bool
+
+  // Recent actions/clients for empty query
+  private var recentClients: [Client] {
+    store.clients.sorted { $0.lastAccessed > $1.lastAccessed }.prefix(5).map { $0 }
+  }
 
   private var matchingClients: [Client] {
     guard !query.isEmpty else { return [] }
@@ -29,21 +35,105 @@ struct SearchSheet: View {
     return store.findings.filter { $0.text.localizedCaseInsensitiveContains(query) }
   }
 
+  // Action items based on query and matched clients
+  private var actionItems: [SearchAction] {
+    var actions: [SearchAction] = []
+
+    // If query matches a client name or is empty with recent clients
+    let targetClients = matchingClients.isEmpty && query.isEmpty ? recentClients : matchingClients
+
+    for client in targetClients.prefix(3) {
+      actions.append(SearchAction(
+        title: "Add task for \(client.name)",
+        systemImage: "checklist",
+        accessibilityHint: "Create a new task for \(client.name)",
+        action: { quickCapture.present(clientID: client.id, stage: .task); dismiss() }
+      ))
+      actions.append(SearchAction(
+        title: "Record payment for \(client.name)",
+        systemImage: "dollarsign.circle",
+        accessibilityHint: "Record a payment for \(client.name)",
+        action: { quickCapture.present(clientID: client.id, stage: .payment); dismiss() }
+      ))
+      actions.append(SearchAction(
+        title: "Call \(client.name)",
+        systemImage: "phone",
+        accessibilityHint: "Call \(client.name)",
+        action: { open("tel://\(client.phone.filter(\.isNumber))"); dismiss() }
+      ))
+      actions.append(SearchAction(
+        title: "Add finding for \(client.name)",
+        systemImage: "eye",
+        accessibilityHint: "Log a finding for \(client.name)",
+        action: { quickCapture.present(clientID: client.id, stage: .finding); dismiss() }
+      ))
+      actions.append(SearchAction(
+        title: "Log decision for \(client.name)",
+        systemImage: "checkmark.seal",
+        accessibilityHint: "Log a decision for \(client.name)",
+        action: { quickCapture.present(clientID: client.id, stage: .decision); dismiss() }
+      ))
+    }
+
+    // Open project actions
+    for project in matchingProjects.prefix(3) {
+      actions.append(SearchAction(
+        title: "Open \(project.name)",
+        systemImage: "square.stack.3d.up",
+        accessibilityHint: "View project details",
+        action: { selectedProject = project; dismiss() }
+      ))
+    }
+
+    return actions
+  }
+
   var body: some View {
     NavigationStack {
       List {
-        if query.isEmpty {
-          Section {
-            Text("Search or do anything")
-              .foregroundStyle(.secondary)
+        // Actions section - always first when query has content or recent items exist
+        if !actionItems.isEmpty {
+          Section("Actions") {
+            ForEach(actionItems) { action in
+              Button(action: action.action) {
+                Label(action.title, systemImage: action.systemImage)
+              }
+              .accessibilityLabel(action.title)
+              .accessibilityHint(action.accessibilityHint)
+              .contentShape(Rectangle())
+            }
           }
-        } else {
+        }
+
+        // Empty state with recent clients when no query
+        if query.isEmpty && matchingClients.isEmpty && matchingProjects.isEmpty && matchingTasks.isEmpty && matchingFindings.isEmpty {
+          if !recentClients.isEmpty {
+            Section("Recent Clients") {
+              ForEach(recentClients) { client in
+                Button { selectedClient = client } label: {
+                  Label(client.name, systemImage: "person.crop.circle")
+                }
+                .accessibilityLabel("Open \(client.name)")
+                .accessibilityHint("View client details")
+              }
+            }
+          } else {
+            Section {
+              InlineEmptyState(systemImage: "magnifyingglass", message: "Search or do anything")
+            }
+          }
+        }
+
+        // Search results
+        if !query.isEmpty {
           if !matchingClients.isEmpty {
             Section("Clients") {
               ForEach(matchingClients) { client in
                 Button { selectedClient = client } label: {
                   Label(client.name, systemImage: "person.crop.circle")
                 }
+                .accessibilityLabel("Open \(client.name)")
+                .accessibilityHint("View client details")
               }
             }
           }
@@ -53,6 +143,8 @@ struct SearchSheet: View {
                 Button { selectedProject = project } label: {
                   Label(project.name, systemImage: "square.stack.3d.up")
                 }
+                .accessibilityLabel("Open \(project.name)")
+                .accessibilityHint("View project details")
               }
             }
           }
@@ -60,6 +152,7 @@ struct SearchSheet: View {
             Section("Tasks") {
               ForEach(matchingTasks) { task in
                 Label(task.title, systemImage: "checklist")
+                  .accessibilityLabel("Task: \(task.title)")
               }
             }
           }
@@ -68,24 +161,13 @@ struct SearchSheet: View {
               ForEach(matchingFindings) { finding in
                 Label(finding.text, systemImage: "eye")
                   .lineLimit(1)
-              }
-            }
-          }
-          if let firstClient = matchingClients.first {
-            Section("Actions") {
-              Label("Add task for \(firstClient.name)", systemImage: "checklist")
-              Label("Record payment", systemImage: "dollarsign.circle")
-              Button {
-                open("tel://\(firstClient.phone.filter(\.isNumber))")
-              } label: {
-                Label("Call \(firstClient.name)", systemImage: "phone")
+                  .accessibilityLabel("Finding: \(finding.text)")
               }
             }
           }
           if matchingClients.isEmpty && matchingProjects.isEmpty && matchingTasks.isEmpty && matchingFindings.isEmpty {
             Section {
-              Text("No results for \"\(query)\"")
-                .foregroundStyle(.secondary)
+              InlineEmptyState(systemImage: "magnifyingglass", message: "No results for \"\(query)\"")
             }
           }
         }
@@ -116,4 +198,12 @@ struct SearchSheet: View {
     guard let url = URL(string: string) else { return }
     UIApplication.shared.open(url)
   }
+}
+
+private struct SearchAction: Identifiable {
+  let id = UUID()
+  let title: String
+  let systemImage: String
+  let accessibilityHint: String
+  let action: () -> Void
 }

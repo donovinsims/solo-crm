@@ -6,7 +6,9 @@ struct SectionLabel: View {
   var body: some View {
     Text(title.uppercased())
       .font(.footnote.weight(.semibold))
-      .foregroundStyle(.secondary)
+      .foregroundStyle(DesignTokens.textSecondary)
       .tracking(0.3)
+      .accessibilityAddTraits(.isHeader)
+      .accessibilityHeading(.h3)
   }
 }

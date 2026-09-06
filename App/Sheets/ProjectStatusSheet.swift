@@ -39,6 +39,8 @@ struct ProjectStatusSheet: View {
                 }
               }
             }
+            .accessibilityLabel("Set status to \(status.rawValue)")
+            .accessibilityHint(selectedStatus == status ? "Currently selected" : "Tap to change status")
           }
         }
 
@@ -70,5 +72,7 @@ struct ProjectStatusSheet: View {
     } label: {
       Label(title, systemImage: systemImage)
     }
+    .accessibilityLabel(title)
+    .accessibilityHint("Opens \(title.lowercased()) capture")
   }
 }
